@@ -1,0 +1,55 @@
+title = "agentvista gitleaks config"
+
+# Extend the default ruleset instead of replacing it.
+[extend]
+useDefault = true
+
+[allowlist]
+description = "Non-issues: detect-secrets' own hash baseline plus test fixtures using fake credentials"  # pragma: allowlist secret
+paths = [
+  '''\.secrets\.baseline''',                                    # stores SHA1 hashes, not secrets — see detect-secrets
+  '''apps/sdk/.*/tests/.*redaction.*''',                          # redaction test fixtures use fake sk-/ghp-/xoxb- patterns on purpose
+  '''apps/sdk/python/tests/test_v2_api\.py''',                     # fake av_test_* SDK init() keys in unit tests
+  '''apps/sdk/python/tests/test_v2_env_init\.py''',               # fake av_* SDK init() keys in unit tests
+  '''apps/api/tests/security/test_redaction_bypass\.py''',
+  '''apps/api/tests/security/test_ai_rate_limit_pii\.py''',
+  '''apps/api/tests/security/test_ai_enterprise_security\.py''',
+  '''apps/api/tests/traces/test_ingestion\.py''',
+  '''apps/api/tests/core/test_redaction_patterns\.py''',
+  '''apps/api/tests/notifications/test_preferences_secret_handling\.py''',
+  '''openspec/changes/phase-6f-g02-pii-redaction/tests/parity_corpus\.json''',
+  '''tools/dogfood_traffic/_shared\.py''',                        # synthetic tokens for load-test fixtures
+  # The inline-credential gate's own selftest corpus (MHQ-845). Its entire
+  # purpose is to hold invented credentials — a `passwd:` fixture with real
+  # entropy, precisely so the gate is proven to catch that shape. Every value
+  # in it was made up for the test and matches nothing that exists. The file
+  # already carries detect-secrets `pragma: allowlist secret` comments, which
+  # gitleaks does not honour; an inline `gitleaks:allow` is not used here
+  # because it is recorded above as not working in this repo.
+  '''scripts/check-inline-credentials\.py''',
+  '''apps/api/apps/core/demo_seed/fixtures/demo_baseline\.json''', # "scorer_key" eval-scorer identifiers (e.g. "faithfulness_v1"), not secrets
+]
+regexes = [
+  # Doc-example fake key (openspec/specs/product/morse-mcp-server/spec.md MCP config
+  # sample). An inline `gitleaks:allow` comment on this exact line did NOT suppress
+  # the finding (verified: still flagged after being added), so allowlisted by content
+  # instead — narrower than a whole-file path allow, and catches the same literal
+  # wherever future docs reuse it.
+  '''mhq_live_abc123\.\.\.''',
+  # generic-api-key false positive (MHQ-740): an earlier commit on
+  # fix/hallucination-scorer-grounded-judge assigned a prompt template name to a
+  # variable named `prompt_key` — gitleaks' heuristic flags any "*key = <alnum
+  # string>" pattern. The variable was renamed (prompt_key -> prompt_template_name)
+  # in a later commit, but gitleaks scans the full PR commit range, so the old
+  # commit's diff still matches. Allowlist regexes match the captured secret
+  # value only (not the whole line), so this targets the two literal template
+  # names directly.
+  '''^hallucination_(grounded|conversation)_v1$''',
+  # generic-api-key false positive: a Django migration dependency tuple
+  # `("api_keys", "0007_retire_legacy_api_keys")` in the api_keys app's own
+  # migrations — gitleaks' heuristic flags the quoted migration-name string
+  # adjacent to the literal app-label "api_keys" as a key value. Plain
+  # migration metadata, zero secret content; appears in both the superseded
+  # hand-written migration (later regenerated) and its replacement.
+  '''^0007_retire_legacy_api_keys$''',
+]

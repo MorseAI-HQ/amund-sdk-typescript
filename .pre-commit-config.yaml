@@ -1,0 +1,100 @@
+repos:
+  # Python quality (ruff replaces black + flake8 + isort)
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.15.1
+    hooks:
+      - id: ruff
+        args: [--fix] # Auto-fix linting issues
+      - id: ruff-format # Format Python code
+
+  # JS/TS quality (via lint-staged to scope to changed files only)
+  - repo: local
+    hooks:
+      - id: lint-staged
+        name: lint-staged
+        entry: pnpm lint-staged
+        language: system
+        pass_filenames: false
+
+  # General hygiene
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v5.0.0
+    hooks:
+      - id: trailing-whitespace
+      - id: end-of-file-fixer
+      - id: check-yaml
+      - id: check-added-large-files
+        args: ["--maxkb=500"]
+        # Exempt intentional binary assets from the size cap:
+        #  - demo seed fixture: a generated data export (AGE-423), not source/secret.
+        #  - docs screenshots: retina product captures (apps/docs/public/screenshots/), shipped as
+        #    static docs assets by the screenshot pipeline (Phase 2 Task 2).
+        #  - demo seed SQL: generated bring-up artifact, gzipped at 3.0 MB. It is
+        #    committed compressed precisely BECAUSE of this cap — raw it is 36 MB,
+        #    which would sit in git history forever. Regenerate with
+        #    `manage.py dump_demo_seed_sql`, which gzips by default.
+        exclude: "^(apps/api/apps/core/demo_seed/fixtures/|apps/docs/public/screenshots/|scripts/seed_demo_prod\\.sql\\.gz$)"
+      - id: check-merge-conflict
+
+  # Secret detection — blocks secrets at commit time (DEV-01)
+  - repo: https://github.com/Yelp/detect-secrets
+    rev: v1.5.0
+    hooks:
+      - id: detect-secrets
+        # Lock files contain dependency integrity hashes (Base64 high-entropy)
+        # that trip the scanner; the built-in `is_lock_file` heuristic doesn't
+        # cover pnpm-lock.yaml reliably, so exclude lock files explicitly.
+        # The demo seed fixture's `content_hash` fields are sha256 digests of
+        # prompt text (deterministic content hashes, not secrets) — same
+        # high-entropy false-positive class, excluded the same way.
+        args:
+          - "--baseline"
+          - ".secrets.baseline"
+          - "--exclude-files"
+          - "(^|/)pnpm-lock\\.yaml$|(^|/)yarn\\.lock$|(^|/)package-lock\\.json$|^apps/api/apps/core/demo_seed/fixtures/"
+
+  # Python security linting — HIGH severity only, excludes tests/ (DEV-02)
+  - repo: https://github.com/PyCQA/bandit
+    rev: 1.9.4
+    hooks:
+      - id: bandit
+        args: ["-lll", "-x", "tests/"]
+        files: ^apps/
+
+  # Inline credentials in prose docs (MHQ-845). This runs IN ADDITION to
+  # detect-secrets above, not instead of it: detect-secrets is tuned for
+  # source code and provably does not see a credential written for a human
+  # reader. The line that leaked a dogfood password for 2.5 months —
+  # `dogfood@…dev` / `<the password>` in a runbook — never contained the word
+  # "password" at all, so no keyword or entropy rule fired on it.
+  #
+  # It belongs here and not only in CI because CI runs after the push, and a
+  # credential that reaches any remote branch is already compromised — the fix
+  # is then rotation plus possible history surgery, not a revert.
+  - repo: local
+    hooks:
+      - id: check-inline-credentials
+        name: check for inline credentials in docs
+        entry: python3 scripts/check-inline-credentials.py
+        language: system
+        pass_filenames: false
+        files: \.(md|mdx)$
+
+  # Conventional Commits enforcement — blocks non-conventional commit messages (DEV-07)
+  # NOTE: requires `pre-commit install --hook-type commit-msg` in addition to `pre-commit install`
+  - repo: https://github.com/compilerla/conventional-pre-commit
+    rev: v3.4.0
+    hooks:
+      - id: conventional-pre-commit
+        stages: [commit-msg]
+        args:
+          - feat
+          - fix
+          - docs
+          - refactor
+          - test
+          - chore
+          - perf
+          - ci
+          - build
+          - revert

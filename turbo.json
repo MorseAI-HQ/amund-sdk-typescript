@@ -1,0 +1,54 @@
+{
+  "$schema": "https://turbo.build/schema.json",
+  "globalDependencies": ["**/.env.*local"],
+  "tasks": {
+    "build": {
+      "dependsOn": ["^build"],
+      "outputs": [".next/**", "!.next/cache/**", "dist/**", "out/**"],
+      "env": ["SENTRY_ORG", "SENTRY_PROJECT", "SENTRY_BUILD_ENFORCE", "RAILWAY_ENVIRONMENT"],
+      "passThroughEnv": ["SENTRY_AUTH_TOKEN"]
+    },
+    "dev": {
+      "cache": false,
+      "persistent": true,
+      "dependsOn": ["^build"]
+    },
+    "lint": {
+      "dependsOn": ["^build"]
+    },
+    "test": {
+      "dependsOn": ["^build"]
+    },
+    "type-check": {
+      "dependsOn": ["^build"]
+    },
+    "generate:api-types": {
+      "cache": false,
+      "inputs": ["apps/api/**/*.py", "apps/api/**/*.json"],
+      "outputs": ["packages/api-client/openapi.json", "packages/api-client/src/gen/v1.d.ts"]
+    },
+    "generate:help-registry": {
+      "cache": false,
+      "inputs": [
+        "apps/docs/content/**/*.mdx",
+        "scripts/docs-gen/build-help-registry.mjs",
+        "scripts/docs-gen/lint-content.mjs"
+      ],
+      "outputs": ["packages/help-registry/src/registry.json"]
+    },
+    "test:e2e": {
+      "cache": false,
+      "env": [
+        "ADMIN_BASE_URL",
+        "WEB_BASE_URL",
+        "ADMIN_EMAIL",
+        "ADMIN_PASSWORD",
+        "REGULAR_USER_EMAIL",
+        "STAFF_USER_EMAIL"
+      ]
+    },
+    "clean": {
+      "cache": false
+    }
+  }
+}

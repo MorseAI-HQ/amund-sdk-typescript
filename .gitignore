@@ -1,0 +1,109 @@
+# OS
+.DS_Store
+Thumbs.db
+*.sw?
+
+# Node / JS / TS
+node_modules/
+.pnpm-store/
+.npm-cache/
+dist/
+build/
+coverage/
+.nyc_output/
+.turbo/
+.next/
+out/
+*.tsbuildinfo
+pnpm-debug.log*
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Vite/Vitest
+.vite/
+vitest.config.ts.timestamp-*
+
+# Expo / React Native
+.expo/
+.expo-shared/
+ios/
+android/
+
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+*.so
+*.egg-info/
+.venv/
+venv/
+env/
+.mypy_cache/
+.pytest_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+*.sqlite3
+coverage.xml
+.hypothesis/
+
+# Django collected static files (built artifact — produced by collectstatic
+# at Docker build time and at runtime; never checked in).
+apps/api/staticfiles/
+
+# User-uploaded media (feedback attachments, local FileSystemStorage default).
+apps/api/media/
+media/
+
+# Env files
+.env
+.env.local
+.env.*.local
+.env.*
+!.env.example
+!.env.*.example
+
+# GSD / planning backups
+.planning/STATE.md.bak-*
+
+# Test artifacts
+test-results/
+
+# Screen recordings (marketing video build artifacts — scripts/record-video.sh)
+apps/web/recordings/
+
+# Local agent/tool folders
+.agent/
+.agents/
+.codex/
+.gemini/
+.openpackage/
+.aider*
+.claude/worktrees/
+.claude/settings.local.json
+.serena/
+.remember/
+apps/landing/playwright-report/
+# orchestration env (covered by .env.* above, but kept explicit for clarity)
+.env.orchestration
+.env.orchestration.bak
+
+# QA bot run artifacts (machine-generated, high churn, binaries)
+qa/state/
+
+# Local scratch worktrees (never tracked — a stray gitlink was committed 2026-07-25)
+.worktrees/
+
+# Post-deploy smoke reports (scripts/run-smoke.sh) — run artefacts, not source
+test-results/SMOKE-*.md
+# Saved smoke session (scripts/run-smoke.sh) — a real session token, never commit
+apps/web/tests/smoke/.auth/
+# Playwright E2E fixture sessions (MHQ-998) — live cookies, never committed.
+apps/web/tests/e2e/.auth/
+
+# Tinybird CLI workspace credentials (host, token, tokens, user_token).
+# Untracked and unignored until 2026-08-08, when a routine `git add -A` staged
+# it and the secret scan caught it. Never commit — rotate if it ever lands.
+.tinyb

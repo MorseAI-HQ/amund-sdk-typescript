@@ -1,0 +1,75 @@
+# pip-audit ignore list
+# Format: one vulnerability ID per line (CVE-*, PYSEC-*, GHSA-*)
+# Each entry has a justification comment on the preceding line(s).
+#
+# Original triage: 2026-05-20 (Code, security hardening LB-10)
+# Last re-verified: 2026-07-31 (Code, launch VAPT Gate 1, MHQ-801)
+#
+# Rating key:
+#   ACCEPT  -- not exploitable in Morse's context
+#   MONITOR -- unclear exploitability, track for future review
+#
+# Re-verification rule: an entry earns its place only while pip-audit still
+# reports it. A stale entry is worse than no entry — it silently re-suppresses
+# the finding if the dependency ever regresses to a vulnerable version. Run
+# bare `uv run pip-audit` (no --ignore-vuln) and drop anything it no longer
+# reports.
+#
+# That rule is now ENFORCED by scripts/check-audit-ignore.py, which runs in CI
+# and weekly. It fails on two things this file previously relied on someone
+# remembering:
+#   * an ID a bare audit no longer reports (STALE — delete the line)
+#   * an entry past its `# expires:` date (re-verify, or drop it)
+#
+# Every ID needs an `# expires: YYYY-MM-DD` on a preceding comment line. One
+# date governs the run of IDs beneath it, so a triage batch shares a review-by
+# date. Ninety days is the working default: long enough not to be busywork,
+# short enough that "not exploitable in our context" is re-judged against a
+# codebase that has actually changed since.
+#
+# 2026-07-31 re-verification: bare pip-audit reports 4 findings in exactly 1
+# package (pip). Every non-pip entry from the 2026-05-20 triage was dropped —
+# the vulnerable versions are gone from the resolved tree:
+#   pygments 2.20.0, idna 3.18, lxml 6.1.1, pillow 12.3.0, langsmith 0.9.4,
+#   click 8.4.2, urllib3 2.7.0 (the requests>=2.33 bump pulled the fix, as the
+#   original urllib3 comment predicted), requests 2.34.2.
+# The two "version bump attempted but reverted" entries (click, pillow) are
+# resolved too — those bumps have since landed on their own.
+
+# 2026-09-06 re-verification: the three pip entries below (CVE-2026-3219,
+# CVE-2026-6357, PYSEC-2026-196) are STALE — a bare `pip-audit` no longer
+# reports them, meaning the base image's pip has moved past the vulnerable
+# 26.0.1 build referenced in the 2026-07-31 note. Deleted per this file's
+# own enforced rule (scripts/check-audit-ignore.py) rather than left to
+# silently re-suppress a future regression.
+
+# ACCEPT -- tornado: pulled in transitively by flower (Celery's monitoring
+# dashboard), a dev-only dependency. engineering/DEV_SETUP.md and
+# engineering/LOCAL_DEPLOYMENT.md both list Flower as "Not deployed" — it
+# runs only via `make flower` on a developer's machine, never on Railway
+# (dev or prod), so tornado's HTTP-server surface is never reachable in any
+# running environment.
+# Newly disclosed 2026-09-06, installed 6.5.7, fixed in 6.5.8. Filed as a
+# follow-up to bump tornado (transitively, via flower) rather than blocking
+# unrelated PRs on a dependency with no runtime exposure.
+# expires: 2026-12-05
+CVE-2026-82397
+GHSA-wwv5-g3v4-889x
+GHSA-8423-8fgw-73vq
+
+# ACCEPT -- weasyprint: url_fetcher bypass in write_pdf(xmp_metadata=...) and
+# write_pdf/render(stylesheets=...) — two call sites build a fresh default
+# URLFetcher instead of using the document's restrictive one, allowing
+# file:// reads / SSRF when either param carries an attacker-influenced
+# URL. Morse's only usage (apps/api/apps/billing/pdf.py:58) is a bare
+# `weasyprint.HTML(string=html_string).write_pdf()` — no `xmp_metadata`, no
+# `stylesheets` argument, no custom `url_fetcher` at all — so neither
+# vulnerable code path is ever reached.
+# Installed 69.0, fixed in 70.0. The `weasyprint>=62.0,<70` pin in
+# apps/api/pyproject.toml predates any documented reason (present since the
+# dependency's introduction, no changelog entry explaining the cap) —
+# bumping past it isn't attempted here to avoid trading a non-exploitable
+# finding for an unverified compatibility risk in PDF generation (customer
+# invoices). Revisit the pin's reason before the next re-verification.
+# expires: 2026-12-12
+PYSEC-2026-3940

@@ -1,0 +1,49 @@
+# pnpm audit ignore list — PRODUCTION dependency tree
+#
+# Format mirrors .pip-audit-ignore: one GHSA per line, justification in the
+# comment(s) above it, and a `# expires:` date governing the run of IDs beneath.
+#
+# THIS FILE IS THE SOURCE OF TRUTH. pnpm itself reads the ID list from
+# package.json -> pnpm.auditConfig.ignoreGhsas; scripts/check-audit-ignore.py
+# fails if the two ever disagree, so a suppression cannot be added to the
+# machine-readable list without the justification and expiry that live here.
+#
+# Rating key (same as .pip-audit-ignore):
+#   ACCEPT  -- not exploitable in Morse's context
+#   MONITOR -- unclear exploitability, track for future review
+#
+# Re-verification rule: an entry earns its place only while `pnpm audit --prod`
+# still reports it. A stale entry is worse than no entry — it silently
+# re-suppresses the finding if the dependency ever regresses. Both that rule
+# and the expiry are ENFORCED by scripts/check-audit-ignore.py.
+#
+# Scope note: this list applies to the PRODUCTION tree only, which is what the
+# `pnpm-audit-prod` CI job gates. Dev/build-tooling advisories are reported
+# weekly by dependency-audit.yml and are deliberately NOT suppressible here —
+# a build tool running in CI with real credentials is a supply-chain surface,
+# not a non-issue.
+
+# ---------------------------------------------------------------------------
+# image-size — 2 x parser denial-of-service. NO UPSTREAM FIX EXISTS.
+#
+# `pnpm audit` reports "Patched versions: <0.0.0" for both: every published
+# version <=2.0.2 is vulnerable and no fixed release exists at any version, so
+# an override cannot clear these. The only alternatives were to remove the
+# dependency (it is transitive — nothing in this repo declares it directly) or
+# to block all merges on an advisory with no remedy.
+#
+# ACCEPT rationale: both are denial-of-service in image PARSERS (ICNS, JXL,
+# HEIF). Morse does not parse untrusted images anywhere on a request path —
+# image-size reaches the production tree through the docs/asset toolchain, not
+# through anything that handles user uploads or request bodies. The exploit
+# requires feeding a crafted image to the parser, which no Morse code path
+# does.
+#
+# Founder accepted this exception explicitly, in-session, on 2026-08-07.
+#
+# Re-review must actually re-judge it, not extend the date: check whether an
+# upstream fix has shipped (`pnpm why image-size`, then the advisory pages) and
+# whether Morse has since grown any path that parses user-supplied images.
+# expires: 2026-11-07
+GHSA-w3rx-r6r6-pgpr
+GHSA-5p2g-fcmc-qvqq

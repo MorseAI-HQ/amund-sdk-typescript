@@ -1,0 +1,65 @@
+# Root .dockerignore — keeps the build context small now that the api
+# Dockerfile is built from the monorepo root (apps/api/Dockerfile needs
+# to see apps/sdk/ as well as apps/api/).
+#
+# Anything not explicitly needed at build time should be excluded here.
+
+# --- Source-tree noise ---
+.git/
+.github/
+.vscode/
+.idea/
+*.swp
+*.swo
+.DS_Store
+
+# --- Python virtualenvs and caches ---
+**/.venv/
+**/venv/
+**/env/
+**/__pycache__/
+**/*.py[cod]
+**/*.egg-info/
+**/.pytest_cache/
+**/.mypy_cache/
+**/.ruff_cache/
+**/.hypothesis/
+**/.coverage
+**/htmlcov/
+
+# --- Node.js ---
+**/node_modules/
+**/.next/
+**/.turbo/
+**/dist/
+**/build/
+**/.expo/
+**/.expo-shared/
+**/coverage/
+
+# --- Logs / test outputs ---
+**/*.log
+**/test-results/
+**/playwright-report/
+
+# --- Local env / secrets ---
+**/.env
+**/.env.local
+**/.env.*.local
+**/.env.*
+!**/.env.example
+
+# --- Docker / build artefacts ---
+**/Dockerfile.bak
+docker-compose.override.yml
+docker-compose.local.yml
+
+# --- Worktrees / scratch ---
+.claude/worktrees/
+.planning/
+archive/
+bizops/
+
+# --- Tests inside source — keep them (Dockerfile multi-stage doesn't ship them) ---
+# (No exclusion for tests/ — they're needed if any startup code touches them
+# transitively; uv install will skip test paths anyway.)
