@@ -1,0 +1,212 @@
+name: Release — TypeScript SDK (@morsehq-dev/sdk)
+
+# MHQ-65 — tag-triggered release pipeline for the TypeScript SDK.
+# See engineering/SDK_PUBLISHING.md §5 for the full design writeup.
+#
+# Trigger: push a tag matching sdk-ts-v*. That push is the actual "go"
+# action — nothing here runs on develop/main pushes.
+#
+# ⚠️ THAT TAG PUSH IS THE ONLY GATE. This comment used to claim publishing was
+# "gated a second time by the `npm-release` GitHub Environment's required
+# reviewer (stable channel only)". There is no such gate and there never was
+# (MHQ-849). All release environments carry ZERO protection rules — verified
+# 2026-08-08 by trying to add one: GitHub returns 422 for BOTH required
+# reviewers and a plain wait timer on this repo.
+#
+# Do not "fix" that by upgrading the plan. The org already reports `team` and
+# the 422 persists, so this is not a tier the environments can be bought out
+# of. See SDK_PUBLISHING.md §0.3.
+#
+# Nothing pauses a stable tag push, and PyPI/npm version numbers can never be
+# reused — so the discipline is convention: a release tag needs the founder's
+# explicit go-ahead in the current session, same as any prod action.
+#
+# Uses npm Trusted Publishing (OIDC) — no NPM_TOKEN secret. Requires the
+# one-time pending-publisher config described in SDK_PUBLISHING.md §0.2,
+# and npm CLI >= 11.5.1 / Node >= 22.14.0 on the publish job specifically
+# (the rest of the monorepo's CI stays on Node 20 — unaffected).
+#
+# The in-repo package.json name stays "@morsehq/sdk" (the pnpm workspace
+# identifier every other app imports from) — this workflow rewrites it to
+# "@morsehq-dev/sdk" (the real npm scope, see SDK_PUBLISHING.md's npm scope
+# note) on the runner's throwaway checkout only, immediately before
+# publish. That rewrite never reaches the repo.
+
+on:
+  push:
+    tags:
+      - "sdk-ts-v*"
+
+  # Manual trigger — REQUIRED ESCAPE HATCH, not a convenience.
+  #
+  # This repo demonstrably drops tag-triggered runs. On 2026-08-06 the rc4 tags
+  # produced no run at all on first push; a delete-and-re-push produced only the
+  # TypeScript run (which then hit a concurrency cancellation), and the Python
+  # tag produced no run across two separate pushes. `ci.yml` carries the same
+  # note from 2026-07-29, when GitHub stopped creating push/pull_request runs
+  # entirely while workflow_dispatch kept working.
+  #
+  # Without this, a dropped event is a dead end: the only recourse is deleting
+  # and re-pushing a release tag and hoping, which is a poor thing to do to a
+  # tag that has already been published against.
+  #
+  # HOW TO USE: dispatch this workflow **with the release tag selected as the
+  # ref**, not a branch. Both the version assertion and the channel selection
+  # read `GITHUB_REF_NAME`, so on a tag ref they behave exactly as they do for a
+  # tag push — same version, same channel, same publish. Dispatching from a
+  # branch would leave `GITHUB_REF_NAME` as the branch name and the version
+  # assertion would fail loudly rather than publish something wrong.
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  WORKING_DIR: apps/sdk/typescript
+  PUBLISHED_PACKAGE_NAME: "@morsehq-dev/sdk"
+
+jobs:
+  determine-channel:
+    name: Determine release channel
+    runs-on: ubicloud-standard-2
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+      channel: ${{ steps.version.outputs.channel }}
+      dist_tag: ${{ steps.version.outputs.dist_tag }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Extract version from tag and package.json, assert match
+        id: version
+        working-directory: ${{ env.WORKING_DIR }}
+        run: |
+          TAG_VERSION="${GITHUB_REF_NAME#sdk-ts-v}"
+          FILE_VERSION="$(node -p "require('./package.json').version")"
+
+          if [ "$TAG_VERSION" != "$FILE_VERSION" ]; then
+            echo "::error::Tag version ($TAG_VERSION) does not match package.json version ($FILE_VERSION) at this commit. Bump and commit the version before tagging."
+            exit 1
+          fi
+
+          # Semver prerelease identifier (text after the first hyphen, before any dot) -> preview channel + matching npm dist-tag.
+          if echo "$FILE_VERSION" | grep -qE '^[0-9]+\.[0-9]+\.[0-9]+-'; then
+            CHANNEL="preview"
+            DIST_TAG="$(echo "$FILE_VERSION" | sed -E 's/^[0-9]+\.[0-9]+\.[0-9]+-([a-zA-Z]+).*/\1/')"
+          else
+            CHANNEL="stable"
+            DIST_TAG="latest"
+          fi
+
+          echo "version=$FILE_VERSION" >> "$GITHUB_OUTPUT"
+          echo "channel=$CHANNEL" >> "$GITHUB_OUTPUT"
+          echo "dist_tag=$DIST_TAG" >> "$GITHUB_OUTPUT"
+          echo "Releasing @morsehq-dev/sdk $FILE_VERSION on the $CHANNEL channel (dist-tag: $DIST_TAG)"
+
+  build-and-test:
+    name: Build + test
+    needs: determine-channel
+    runs-on: ubicloud-standard-2
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: pnpm
+
+      - name: Install
+        run: pnpm install --frozen-lockfile
+
+      - name: Type-check
+        run: pnpm --filter @morsehq/sdk type-check
+
+      - name: Lint
+        run: pnpm --filter @morsehq/sdk lint
+
+      - name: Test
+        run: pnpm --filter @morsehq/sdk test
+
+      - name: Build
+        run: pnpm --filter @morsehq/sdk build
+
+      # Publishing a browser bundle that imports node built-ins breaks every
+      # downstream consumer's bundler, and an npm version cannot be unpublished
+      # after 72h — so this gates the release, not just CI.
+      - name: Check browser bundle has no Node-only imports
+        run: node scripts/check-sdk-browser-bundle.mjs
+
+      - name: Rewrite package name for publish + dry-run pack
+        working-directory: ${{ env.WORKING_DIR }}
+        env:
+          PKG_NAME: ${{ env.PUBLISHED_PACKAGE_NAME }}
+        run: |
+          node -e "
+            const fs = require('fs');
+            const pkg = JSON.parse(fs.readFileSync('package.json', 'utf8'));
+            pkg.name = process.env.PKG_NAME;
+            fs.writeFileSync('package.json', JSON.stringify(pkg, null, 2) + '\n');
+          "
+          npm pack --dry-run
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ts-package
+          path: |
+            ${{ env.WORKING_DIR }}/package.json
+            ${{ env.WORKING_DIR }}/dist/
+            ${{ env.WORKING_DIR }}/README.md
+          retention-days: 7
+
+  publish-npm:
+    name: Publish to npm (${{ needs.determine-channel.outputs.channel }})
+    needs: [determine-channel, build-and-test]
+    runs-on: ubicloud-standard-2
+    environment:
+      name: ${{ needs.determine-channel.outputs.channel == 'stable' && 'npm-release' || 'npm-release-preview' }}
+    permissions:
+      id-token: write
+    env:
+      NPM_DIST_TAG: ${{ needs.determine-channel.outputs.dist_tag }}
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: ts-package
+          path: publish-dir/
+
+      - uses: actions/setup-node@v4
+        with:
+          # Node 24 ships npm >= 11.6, which already supports OIDC trusted
+          # publishing (needs >= 11.5.1). Do NOT `npm install -g npm@latest`
+          # here: that is an unpinned moving target, and it broke this job on
+          # 2026-08-01 when npm 12 shipped requiring node ^22.22.2 || ^24.15.0
+          # while this step still pinned node 22.14 (EBADENGINE). The bundled
+          # npm is sufficient, so there is nothing to install.
+          node-version: "24"
+          registry-url: "https://registry.npmjs.org"
+
+      - name: Assert npm CLI supports OIDC trusted publishing
+        run: |
+          NPM_VERSION="$(npm --version)"
+          echo "npm $NPM_VERSION on node $(node --version)"
+          # Fails loudly here rather than as an opaque 403 at publish time.
+          node -e 'const [maj,min,pat]=process.argv[1].split(".").map(Number);
+            if (maj < 11 || (maj === 11 && (min < 5 || (min === 5 && pat < 1)))) {
+              console.error("::error::npm " + process.argv[1] + " is too old for OIDC trusted publishing (need >= 11.5.1). Raise node-version.");
+              process.exit(1);
+            }' "$NPM_VERSION"
+
+      # No `--provenance`. npm will only verify a Sigstore provenance bundle
+      # when BOTH of these hold, and the second one we cannot satisfy:
+      #   1. a GitHub-hosted runner (we use ubicloud -> reads as "self-hosted")
+      #   2. a PUBLIC source repository (MorseAI-HQ/morse-ai is private)
+      # Both were hit in sequence on 2026-08-01 as 422s from the registry.
+      # Repo visibility is a deliberate choice, not an oversight, so provenance
+      # stays off until that changes. To re-enable: make the repo public, move
+      # this job to `runs-on: ubuntu-latest`, then add `--provenance` back.
+      # Publishing is still OIDC-authenticated via trusted publishing — the
+      # missing piece is the public build attestation, not the auth.
+      - name: Publish
+        working-directory: publish-dir
+        run: npm publish --tag "$NPM_DIST_TAG" --access public
