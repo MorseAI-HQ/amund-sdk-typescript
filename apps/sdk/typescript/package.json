@@ -1,0 +1,176 @@
+{
+  "name": "@morsehq/sdk",
+  "version": "0.7.0",
+  "description": "Unified observability for AI agents and infrastructure. One SDK.",
+  "license": "MIT",
+  "homepage": "https://morsehq.dev",
+  "author": "Morse <hello@morsehq.dev>",
+  "keywords": [
+    "observability",
+    "ai-agents",
+    "llm",
+    "tracing",
+    "opentelemetry",
+    "anthropic",
+    "openai",
+    "langchain",
+    "langgraph"
+  ],
+  "private": false,
+  "type": "module",
+  "main": "./dist/index.cjs",
+  "module": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "files": [
+    "dist"
+  ],
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "browser": "./dist/browser/index.js",
+      "import": "./dist/index.js",
+      "require": "./dist/index.cjs",
+      "default": "./dist/index.js"
+    },
+    "./vercel-ai": {
+      "types": "./dist/vercel-ai/index.d.ts",
+      "browser": "./dist/browser/vercel-ai/index.js",
+      "import": "./dist/vercel-ai/index.js",
+      "require": "./dist/vercel-ai/index.cjs",
+      "default": "./dist/vercel-ai/index.js"
+    },
+    "./anthropic": {
+      "types": "./dist/anthropic/index.d.ts",
+      "browser": "./dist/browser/anthropic/index.js",
+      "import": "./dist/anthropic/index.js",
+      "require": "./dist/anthropic/index.cjs",
+      "default": "./dist/anthropic/index.js"
+    },
+    "./openai": {
+      "types": "./dist/openai/index.d.ts",
+      "browser": "./dist/browser/openai/index.js",
+      "import": "./dist/openai/index.js",
+      "require": "./dist/openai/index.cjs",
+      "default": "./dist/openai/index.js"
+    },
+    "./anthropic-agent-sdk": {
+      "types": "./dist/anthropic-agent-sdk/index.d.ts",
+      "browser": "./dist/browser/anthropic-agent-sdk/index.js",
+      "import": "./dist/anthropic-agent-sdk/index.js",
+      "require": "./dist/anthropic-agent-sdk/index.cjs",
+      "default": "./dist/anthropic-agent-sdk/index.js"
+    },
+    "./openai-agents": {
+      "types": "./dist/openai-agents/index.d.ts",
+      "browser": "./dist/browser/openai-agents/index.js",
+      "import": "./dist/openai-agents/index.js",
+      "require": "./dist/openai-agents/index.cjs",
+      "default": "./dist/openai-agents/index.js"
+    },
+    "./langgraph": {
+      "types": "./dist/langgraph/index.d.ts",
+      "browser": "./dist/browser/langgraph/index.js",
+      "import": "./dist/langgraph/index.js",
+      "require": "./dist/langgraph/index.cjs",
+      "default": "./dist/langgraph/index.js"
+    },
+    "./langchain": {
+      "types": "./dist/langchain/index.d.ts",
+      "browser": "./dist/browser/langchain/index.js",
+      "import": "./dist/langchain/index.js",
+      "require": "./dist/langchain/index.cjs",
+      "default": "./dist/langchain/index.js"
+    },
+    "./integrations/pino": {
+      "types": "./dist/integrations/pino.d.ts",
+      "browser": "./dist/browser/integrations/pino.js",
+      "import": "./dist/integrations/pino.js",
+      "require": "./dist/integrations/pino.cjs",
+      "default": "./dist/integrations/pino.js"
+    },
+    "./package.json": "./package.json"
+  },
+  "sideEffects": false,
+  "scripts": {
+    "build": "tsup --config tsup.config.ts",
+    "dev": "tsup --watch --config tsup.config.ts",
+    "type-check": "tsc --noEmit",
+    "lint": "eslint \"src/**/*.{ts,tsx}\" --max-warnings=0",
+    "test": "vitest run",
+    "contract": "tsx tests/contract/check.ts",
+    "bench:infra": "tsx benchmarks/infra-capture-overhead.ts",
+    "dogfood:anthropic": "tsx dogfood/anthropic-agent-sdk.ts",
+    "dogfood:openai": "tsx dogfood/openai-agents.ts",
+    "dogfood:langgraph": "tsx dogfood/langgraph.ts",
+    "dogfood:vercel-ai": "tsx dogfood/vercel-ai.ts",
+    "dogfood:anthropic-raw": "tsx dogfood/anthropic.ts",
+    "dogfood:openai-raw": "tsx dogfood/openai.ts",
+    "dogfood:langchain": "tsx dogfood/langchain.ts",
+    "dogfood:all": "pnpm dogfood:anthropic && pnpm dogfood:openai && pnpm dogfood:langgraph && pnpm dogfood:vercel-ai && pnpm dogfood:anthropic-raw && pnpm dogfood:openai-raw && pnpm dogfood:langchain",
+    "dogfood:smoke": "tsx dogfood/smoke.ts"
+  },
+  "peerDependencies": {
+    "@anthropic-ai/claude-agent-sdk": ">=0.3.0",
+    "@anthropic-ai/sdk": ">=0.90.0",
+    "@langchain/core": ">=1.0.0",
+    "@langchain/langgraph": ">=1.0.0",
+    "@openai/agents": ">=0.2.0",
+    "ai": ">=7.0.0",
+    "openai": ">=6.0.0"
+  },
+  "peerDependenciesMeta": {
+    "ai": {
+      "optional": true
+    },
+    "@anthropic-ai/sdk": {
+      "optional": true
+    },
+    "@anthropic-ai/claude-agent-sdk": {
+      "optional": true
+    },
+    "@openai/agents": {
+      "optional": true
+    },
+    "openai": {
+      "optional": true
+    },
+    "@langchain/core": {
+      "optional": true
+    },
+    "@langchain/langgraph": {
+      "optional": true
+    }
+  },
+  "dependencies": {
+    "@opentelemetry/api": "^1.9.0",
+    "@opentelemetry/context-async-hooks": "^2.10.0",
+    "@opentelemetry/core": "^2.6.1",
+    "@opentelemetry/exporter-trace-otlp-proto": "^0.221.0",
+    "@opentelemetry/instrumentation": "^0.221.0",
+    "@opentelemetry/instrumentation-mysql2": "^0.67.0",
+    "@opentelemetry/instrumentation-pg": "^0.73.0",
+    "@opentelemetry/otlp-exporter-base": "^0.221.0",
+    "@opentelemetry/sdk-trace-base": "^2.6.1",
+    "@opentelemetry/sdk-trace-node": "^2.6.1",
+    "@opentelemetry/semantic-conventions": "^1.27.0"
+  },
+  "devDependencies": {
+    "@ai-sdk/openai": "^4.0.20",
+    "@anthropic-ai/claude-agent-sdk": "^0.3.223",
+    "@langchain/core": "^1.2.5",
+    "@langchain/langgraph": "^1.4.9",
+    "@langchain/openai": "^0.3.0",
+    "@morsehq/config-eslint": "workspace:*",
+    "@morsehq/config-ts": "workspace:*",
+    "@openai/agents": "^0.2.1",
+    "@types/better-sqlite3": "^7.6.13",
+    "ai": "^7.0.55",
+    "better-sqlite3": "^12.0.0",
+    "mysql2": "^3.11.0",
+    "pg": "^8.13.0",
+    "tsup": "^8.3.0",
+    "tsx": "^4.19.0",
+    "typescript": "^5.6.0",
+    "vitest": "^2.1.0"
+  }
+}

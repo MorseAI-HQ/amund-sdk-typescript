@@ -1,0 +1,32 @@
+node_modules
+.next
+.turbo
+dist
+pnpm-lock.yaml
+apps/api
+
+# memory/decisions.md is an append-only prose log full of bare
+# underscore_identifiers (migration_0003, snake_case fields, etc.) in
+# plain text, not inside code spans. Prettier's markdown emphasis
+# normalization repeatedly mangled these into `migration*0003` /
+# `_word_` on every commit that touched the file — corrupting past
+# entries as a side effect of unrelated appends. See memory/decisions.md
+# 2026-07-27 "CI_DOGFOOD_AGENTVISTA_*" entry, corrupted and fixed twice
+# before this exclusion was added.
+memory/decisions.md
+# Same hazard, new location: CLAUDE.md moved decision logging to one file per
+# decision under memory/decisions/, and that directory was never added here —
+# so the exclusion above protected only the frozen archive. New records carry
+# the same bare identifiers and would be mangled identically.
+memory/decisions/
+
+# Generated artifact, not hand-edited: scripts/build-dogfood-coverage.py writes
+# it with json.dumps(indent=2), which always expands short arrays; prettier
+# collapses them. Two writers, two formats, so EVERY run of
+# check-req-coverage.py left a ~1,700-line diff that was 100% formatting
+# (MHQ-734). That churn is not cosmetic — it hid a real staleness bug once
+# (ING-T3-03 missing a test file, invisible inside the noise) and manufactured
+# a false one later, when the diff was read as artifact rot that did not exist.
+# Letting json.dumps be canonical makes the writer's own "unchanged" check
+# effective, so a clean tree stays clean.
+engineering/dogfood-coverage.json
