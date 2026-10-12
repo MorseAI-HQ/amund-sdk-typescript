@@ -10,7 +10,7 @@ targetRules = ["generic-api-key"]
 condition = "AND"
 regexTarget = "secret"
 paths = ["^apps/sdk/typescript/tests/infra-pii-audit\\.test\\.ts$"]
-regexes = ["^tok_canary_9f3a7c$"]
+regexes = ["^tok_canary_9f3a7c$"] # pragma: allowlist secret (reviewed synthetic fixture values only)
 
 [[allowlists]]
 description = "Owner-reviewed synthetic fixture or code identifier"
@@ -18,7 +18,7 @@ targetRules = ["generic-api-key"]
 condition = "AND"
 regexTarget = "secret"
 paths = ["^apps/sdk/typescript/tests/redaction\\.test\\.ts$"]
-regexes = ["^sk-proj-AbCdEf1234567890ghIjKlMnOpQrStUv$", "^sk_live_51AbCdEfGhIjKlMnOpQrStUvWx$"]
+regexes = ["^sk-proj-AbCdEf1234567890ghIjKlMnOpQrStUv$", "^sk_live_51AbCdEfGhIjKlMnOpQrStUvWx$"] # pragma: allowlist secret (reviewed synthetic fixture values only)
 
 [[allowlists]]
 description = "Owner-reviewed synthetic fixture or code identifier"
@@ -26,7 +26,7 @@ targetRules = ["github-pat"]
 condition = "AND"
 regexTarget = "secret"
 paths = ["^apps/sdk/typescript/tests/fixtures/parity_corpus\\.json$"]
-regexes = ["^ghp_1234567890abcdef1234567890abcdef1234$"]
+regexes = ["^ghp_1234567890abcdef1234567890abcdef1234$"] # pragma: allowlist secret (reviewed synthetic fixture values only)
 
 [[allowlists]]
 description = "Owner-reviewed synthetic fixture or code identifier"
@@ -34,7 +34,7 @@ targetRules = ["github-pat"]
 condition = "AND"
 regexTarget = "secret"
 paths = ["^apps/sdk/typescript/tests/redaction\\.test\\.ts$"]
-regexes = ["^ghp_1234567890abcdef1234567890abcdef1234$"]
+regexes = ["^ghp_1234567890abcdef1234567890abcdef1234$"] # pragma: allowlist secret (reviewed synthetic fixture values only)
 
 [[allowlists]]
 description = "Owner-reviewed synthetic fixture or code identifier"
@@ -42,7 +42,7 @@ targetRules = ["jwt"]
 condition = "AND"
 regexTarget = "secret"
 paths = ["^apps/sdk/typescript/tests/fixtures/parity_corpus\\.json$"]
-regexes = ["^eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9\\.eyJzdWIiOiIxMjM0NTY3ODkwIiwibmFtZSI6IkphbmUgRG9lIn0\\.xCJVoSi1q19SPSk7kKb6kYP8yU3yz7sLcG5bbqJyU2Q$"]
+regexes = ["^eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9\\.eyJzdWIiOiIxMjM0NTY3ODkwIiwibmFtZSI6IkphbmUgRG9lIn0\\.xCJVoSi1q19SPSk7kKb6kYP8yU3yz7sLcG5bbqJyU2Q$"] # pragma: allowlist secret (reviewed synthetic fixture values only)
 
 [[allowlists]]
 description = "Owner-reviewed synthetic fixture or code identifier"
@@ -50,7 +50,7 @@ targetRules = ["jwt"]
 condition = "AND"
 regexTarget = "secret"
 paths = ["^apps/sdk/typescript/tests/redaction\\.test\\.ts$"]
-regexes = ["^eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9\\.eyJzdWIiOiIxMjM0NTY3ODkwIn0\\.xCJVoSi1q19SPSk7kKb6kYP8yU3yz7sLcG5bbqJyU2Q$"]
+regexes = ["^eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9\\.eyJzdWIiOiIxMjM0NTY3ODkwIn0\\.xCJVoSi1q19SPSk7kKb6kYP8yU3yz7sLcG5bbqJyU2Q$"] # pragma: allowlist secret (reviewed synthetic fixture values only)
 
 [[allowlists]]
 description = "Owner-reviewed synthetic fixture or code identifier"
@@ -58,7 +58,7 @@ targetRules = ["slack-bot-token"]
 condition = "AND"
 regexTarget = "secret"
 paths = ["^apps/sdk/typescript/tests/fixtures/parity_corpus\\.json$"]
-regexes = ["^xoxb-1234567890-1234567890-AbCdEfGhIjKlMnOpQrStUvWx$"]
+regexes = ["^xoxb-1234567890-1234567890-AbCdEfGhIjKlMnOpQrStUvWx$"] # pragma: allowlist secret (reviewed synthetic fixture values only)
 
 [[allowlists]]
 description = "Owner-reviewed synthetic fixture or code identifier"
@@ -66,7 +66,7 @@ targetRules = ["slack-bot-token"]
 condition = "AND"
 regexTarget = "secret"
 paths = ["^apps/sdk/typescript/tests/redaction\\.test\\.ts$"]
-regexes = ["^xoxb-1234567890-1234567890-AbCdEfGhIjKlMnOpQrStUvWx$"]
+regexes = ["^xoxb-1234567890-1234567890-AbCdEfGhIjKlMnOpQrStUvWx$"] # pragma: allowlist secret (reviewed synthetic fixture values only)
 
 [[allowlists]]
 description = "Owner-reviewed synthetic fixture or code identifier"
@@ -74,7 +74,7 @@ targetRules = ["stripe-access-token"]
 condition = "AND"
 regexTarget = "secret"
 paths = ["^apps/sdk/typescript/tests/fixtures/parity_corpus\\.json$"]
-regexes = ["^sk_live_51AbCdEfGhIjKlMnOpQrStUvWx$", "^sk_test_51AbCdEfGhIjKlMnOpQrStUvWx$"]
+regexes = ["^sk_live_51AbCdEfGhIjKlMnOpQrStUvWx$", "^sk_test_51AbCdEfGhIjKlMnOpQrStUvWx$"] # pragma: allowlist secret (reviewed synthetic fixture values only)
 
 [[allowlists]]
 description = "Owner-reviewed synthetic fixture or code identifier"
@@ -82,4 +82,91 @@ targetRules = ["stripe-access-token"]
 condition = "AND"
 regexTarget = "secret"
 paths = ["^apps/sdk/typescript/tests/redaction\\.test\\.ts$"]
-regexes = ["^sk_live_51AbCdEfGhIjKlMnOpQrStUvWx$"]
+regexes = ["^sk_live_51AbCdEfGhIjKlMnOpQrStUvWx$"] # pragma: allowlist secret (reviewed synthetic fixture values only)
+[[allowlists]]
+description = "Existing baseline hash or deliberate checker negative fixture"
+targetRules = ["generic-api-key"]
+condition = "AND"
+regexTarget = "secret"
+paths = ["^\\.secrets\\.baseline$"]
+regexes = ["^11d33efc2208b4c342269d8da7cde286f9681f0f$"]
+
+[[allowlists]]
+description = "Existing baseline hash or deliberate checker negative fixture"
+targetRules = ["generic-api-key"]
+condition = "AND"
+regexTarget = "secret"
+paths = ["^\\.secrets\\.baseline$"]
+regexes = ["^34c659f4df06118f5bc39edc355b4542851ad3f6$"]
+
+[[allowlists]]
+description = "Existing baseline hash or deliberate checker negative fixture"
+targetRules = ["generic-api-key"]
+condition = "AND"
+regexTarget = "secret"
+paths = ["^\\.secrets\\.baseline$"]
+regexes = ["^41f7feb2ebab514c2525ef6c57d90eb6ca456819$"]
+
+[[allowlists]]
+description = "Existing baseline hash or deliberate checker negative fixture"
+targetRules = ["generic-api-key"]
+condition = "AND"
+regexTarget = "secret"
+paths = ["^\\.secrets\\.baseline$"]
+regexes = ["^665b1e3851eefefa3fb878654292f16597d25155$"]
+
+[[allowlists]]
+description = "Existing baseline hash or deliberate checker negative fixture"
+targetRules = ["generic-api-key"]
+condition = "AND"
+regexTarget = "secret"
+paths = ["^\\.secrets\\.baseline$"]
+regexes = ["^676fc6055c2866b82f2e030980c50e582914d27d$"]
+
+[[allowlists]]
+description = "Existing baseline hash or deliberate checker negative fixture"
+targetRules = ["generic-api-key"]
+condition = "AND"
+regexTarget = "secret"
+paths = ["^\\.secrets\\.baseline$"]
+regexes = ["^872c5ca0d621a879a45552f31ad3fadad689ccd9$"]
+
+[[allowlists]]
+description = "Existing baseline hash or deliberate checker negative fixture"
+targetRules = ["generic-api-key"]
+condition = "AND"
+regexTarget = "secret"
+paths = ["^\\.secrets\\.baseline$"]
+regexes = ["^88f362c6db02beb508ad8f0ed8936142eda77103$"]
+
+[[allowlists]]
+description = "Existing baseline hash or deliberate checker negative fixture"
+targetRules = ["generic-api-key"]
+condition = "AND"
+regexTarget = "secret"
+paths = ["^\\.secrets\\.baseline$"]
+regexes = ["^a456e56c977551a9ca23815d83f8b6b8b4a2b13d$"]
+
+[[allowlists]]
+description = "Existing baseline hash or deliberate checker negative fixture"
+targetRules = ["generic-api-key"]
+condition = "AND"
+regexTarget = "secret"
+paths = ["^\\.secrets\\.baseline$"]
+regexes = ["^b4369441b574316231ab0eaeec3f4f5c09e2d86f$"]
+
+[[allowlists]]
+description = "Existing baseline hash or deliberate checker negative fixture"
+targetRules = ["generic-api-key"]
+condition = "AND"
+regexTarget = "secret"
+paths = ["^\\.secrets\\.baseline$"]
+regexes = ["^cf88e52c15ab5fae77de2d8a6a3a4fad300f692e$"]
+
+[[allowlists]]
+description = "Existing baseline hash or deliberate checker negative fixture"
+targetRules = ["generic-api-key"]
+condition = "AND"
+regexTarget = "secret"
+paths = ["^scripts/check-inline-credentials\\.py$"]
+regexes = ["^h7Kd93ntQm2z$"]
