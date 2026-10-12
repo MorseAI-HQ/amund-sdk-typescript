@@ -1,3 +1,6 @@
+# Standalone template: copy to .github/workflows/release-typescript.yml.
+# Rebind registry trusted publishers to this repository before enabling Actions.
+# Release tag pushes/dispatches require founder approval of the reviewed release.
 name: Release — TypeScript SDK (@morsehq-dev/sdk)
 
 # MHQ-65 — tag-triggered release pipeline for the TypeScript SDK.
@@ -68,7 +71,7 @@ env:
 jobs:
   determine-channel:
     name: Determine release channel
-    runs-on: ubicloud-standard-2
+    runs-on: ubuntu-latest
     outputs:
       version: ${{ steps.version.outputs.version }}
       channel: ${{ steps.version.outputs.channel }}
@@ -105,11 +108,13 @@ jobs:
   build-and-test:
     name: Build + test
     needs: determine-channel
-    runs-on: ubicloud-standard-2
+    runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
 
       - uses: pnpm/action-setup@v4
+        with:
+          version: "9.15.4"
 
       - uses: actions/setup-node@v4
         with:
@@ -126,7 +131,7 @@ jobs:
         run: pnpm --filter @morsehq/sdk lint
 
       - name: Test
-        run: pnpm --filter @morsehq/sdk test
+        run: pnpm --filter @morsehq/sdk exec vitest run --maxWorkers=1
 
       - name: Build
         run: pnpm --filter @morsehq/sdk build
@@ -157,12 +162,13 @@ jobs:
             ${{ env.WORKING_DIR }}/package.json
             ${{ env.WORKING_DIR }}/dist/
             ${{ env.WORKING_DIR }}/README.md
+            ${{ env.WORKING_DIR }}/LICENSE
           retention-days: 7
 
   publish-npm:
     name: Publish to npm (${{ needs.determine-channel.outputs.channel }})
     needs: [determine-channel, build-and-test]
-    runs-on: ubicloud-standard-2
+    runs-on: ubuntu-latest
     environment:
       name: ${{ needs.determine-channel.outputs.channel == 'stable' && 'npm-release' || 'npm-release-preview' }}
     permissions:
@@ -197,16 +203,8 @@ jobs:
               process.exit(1);
             }' "$NPM_VERSION"
 
-      # No `--provenance`. npm will only verify a Sigstore provenance bundle
-      # when BOTH of these hold, and the second one we cannot satisfy:
-      #   1. a GitHub-hosted runner (we use ubicloud -> reads as "self-hosted")
-      #   2. a PUBLIC source repository (MorseAI-HQ/morse-ai is private)
-      # Both were hit in sequence on 2026-08-01 as 422s from the registry.
-      # Repo visibility is a deliberate choice, not an oversight, so provenance
-      # stays off until that changes. To re-enable: make the repo public, move
-      # this job to `runs-on: ubuntu-latest`, then add `--provenance` back.
-      # Publishing is still OIDC-authenticated via trusted publishing — the
-      # missing piece is the public build attestation, not the auth.
+      # npm OIDC requires a GitHub-hosted runner. Public source repositories
+      # receive automatic provenance; private source repositories do not.
       - name: Publish
         working-directory: publish-dir
         run: npm publish --tag "$NPM_DIST_TAG" --access public

@@ -1,4 +1,4 @@
 packages:
-  - "apps/*"
-  - "apps/sdk/*"
-  - "packages/*"
+  - "apps/sdk/typescript"
+  - "packages/config-eslint"
+  - "packages/config-ts"
