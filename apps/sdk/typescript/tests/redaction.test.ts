@@ -30,7 +30,7 @@ import { type BatchTransport } from "../src/_internal/transport";
 const here = dirname(fileURLToPath(import.meta.url));
 const PARITY_CORPUS_PATH = resolve(
   here,
-  "../../../../openspec/changes/archive/2026-05-07-phase-6f-g02-pii-redaction/tests/parity_corpus.json",
+  "./fixtures/parity_corpus.json",
 );
 
 interface ParityRow {

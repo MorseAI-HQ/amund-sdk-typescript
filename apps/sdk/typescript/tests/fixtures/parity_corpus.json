@@ -1,0 +1,255 @@
+{
+  "_README": "Parity test corpus for G-02 PII redaction. Each row is fed through server-side `redact_string`, Python SDK `redact()`, and TypeScript SDK `redactString()` with the specified `enabled_patterns`. All three implementations MUST produce the same output. The `enabled_patterns` field uses canonical pattern keys; an empty list means 'all defaults' (the eight non-ip patterns).",
+  "rows": [
+    {
+      "id": "api_key_openai_sk",
+      "input": "Calling OpenAI with sk-proj-AbCdEf1234567890ghIjKlMnOpQrStUv to fetch",
+      "expected_output": "Calling OpenAI with [REDACTED:api_key] to fetch",
+      "enabled_patterns": []
+    },
+    {
+      "id": "api_key_stripe_live",
+      "input": "Webhook secret was sk_live_51AbCdEfGhIjKlMnOpQrStUvWx",
+      "expected_output": "Webhook secret was [REDACTED:api_key]",
+      "enabled_patterns": []
+    },
+    {
+      "id": "api_key_stripe_test",
+      "input": "Test mode key sk_test_51AbCdEfGhIjKlMnOpQrStUvWx",
+      "expected_output": "Test mode key [REDACTED:api_key]",
+      "enabled_patterns": []
+    },
+    {
+      "id": "api_key_av",
+      "input": "AgentVista creds av_fe9a2ea712345678abcdef0987654321",
+      "expected_output": "AgentVista creds [REDACTED:api_key]",
+      "enabled_patterns": []
+    },
+    {
+      "id": "api_key_github_pat",
+      "input": "GitHub PAT ghp_1234567890abcdef1234567890abcdef1234",
+      "expected_output": "GitHub PAT [REDACTED:api_key]",
+      "enabled_patterns": []
+    },
+    {
+      "id": "api_key_aws_access",
+      "input": "AWS_ACCESS_KEY_ID=AKIAIOSFODNN7EXAMPLE in env",
+      "expected_output": "AWS_ACCESS_KEY_ID=[REDACTED:api_key] in env",
+      "enabled_patterns": []
+    },
+    {
+      "id": "api_key_slack_bot",
+      "input": "Slack bot token xoxb-1234567890-1234567890-AbCdEfGhIjKlMnOpQrStUvWx",
+      "expected_output": "Slack bot token [REDACTED:api_key]",
+      "enabled_patterns": []
+    },
+    {
+      "id": "api_key_no_match_short",
+      "input": "Short string sk-abc that doesn't reach the 20-char threshold",
+      "expected_output": "Short string sk-abc that doesn't reach the 20-char threshold",
+      "enabled_patterns": []
+    },
+    {
+      "id": "jwt_simple",
+      "input": "Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxMjM0NTY3ODkwIiwibmFtZSI6IkphbmUgRG9lIn0.xCJVoSi1q19SPSk7kKb6kYP8yU3yz7sLcG5bbqJyU2Q",
+      "expected_output": "Bearer [REDACTED:jwt]",
+      "enabled_patterns": []
+    },
+    {
+      "id": "jwt_no_match_two_dots_only",
+      "input": "Not a JWT: foo.bar.baz",
+      "expected_output": "Not a JWT: foo.bar.baz",
+      "enabled_patterns": []
+    },
+    {
+      "id": "credit_card_visa",
+      "input": "Card ending in 4111 1111 1111 1111 last month",
+      "expected_output": "Card ending in [REDACTED:credit_card] last month",
+      "enabled_patterns": []
+    },
+    {
+      "id": "credit_card_amex",
+      "input": "Charged 378282246310005 today",
+      "expected_output": "Charged [REDACTED:credit_card] today",
+      "enabled_patterns": []
+    },
+    {
+      "id": "credit_card_no_match_fail_luhn",
+      "input": "Random 16 digits 1234567890123456 that fail Luhn",
+      "expected_output": "Random 16 digits 1234567890123456 that fail Luhn",
+      "enabled_patterns": []
+    },
+    {
+      "id": "email_simple",
+      "input": "Reach me at jane@example.com tomorrow",
+      "expected_output": "Reach me at [REDACTED:email] tomorrow",
+      "enabled_patterns": []
+    },
+    {
+      "id": "email_with_plus",
+      "input": "Send to jane+work@sub.example.co.uk for billing",
+      "expected_output": "Send to [REDACTED:email] for billing",
+      "enabled_patterns": []
+    },
+    {
+      "id": "email_disabled",
+      "input": "Reach me at jane@example.com tomorrow",
+      "expected_output": "Reach me at jane@example.com tomorrow",
+      "enabled_patterns": [
+        "api_key_prefixed",
+        "jwt",
+        "credit_card",
+        "phone_us",
+        "phone_e164",
+        "ssn_us"
+      ]
+    },
+    {
+      "id": "phone_us_dashed",
+      "input": "Call 555-867-5309 if needed",
+      "expected_output": "Call [REDACTED:phone] if needed",
+      "enabled_patterns": []
+    },
+    {
+      "id": "phone_us_parens",
+      "input": "Office line (415) 555-2671",
+      "expected_output": "Office line [REDACTED:phone]",
+      "enabled_patterns": []
+    },
+    {
+      "id": "phone_e164",
+      "input": "International +44 20 7946 0958 line",
+      "expected_output": "International [REDACTED:phone] line",
+      "enabled_patterns": []
+    },
+    {
+      "id": "ssn_us_dashed",
+      "input": "Verify SSN 123-45-6789 on file",
+      "expected_output": "Verify SSN [REDACTED:ssn] on file",
+      "enabled_patterns": []
+    },
+    {
+      "id": "ssn_us_invalid_prefix_000",
+      "input": "Bad SSN 000-12-3456 should not match",
+      "expected_output": "Bad SSN 000-12-3456 should not match",
+      "enabled_patterns": []
+    },
+    {
+      "id": "ssn_us_invalid_prefix_666",
+      "input": "Bad SSN 666-12-3456 should not match",
+      "expected_output": "Bad SSN 666-12-3456 should not match",
+      "enabled_patterns": []
+    },
+    {
+      "id": "ip_off_by_default",
+      "input": "Request from 192.168.1.42 yesterday",
+      "expected_output": "Request from 192.168.1.42 yesterday",
+      "enabled_patterns": []
+    },
+    {
+      "id": "ip_on_when_enabled",
+      "input": "Request from 192.168.1.42 yesterday",
+      "expected_output": "Request from [REDACTED:ip] yesterday",
+      "enabled_patterns": [
+        "api_key_prefixed",
+        "jwt",
+        "credit_card",
+        "email",
+        "phone_us",
+        "phone_e164",
+        "ssn_us",
+        "ip_address"
+      ]
+    },
+    {
+      "id": "multi_pattern_one_string",
+      "input": "Login as jane@example.com using sk-proj-AbCdEf1234567890ghIjKlMnOpQrStUv",
+      "expected_output": "Login as [REDACTED:email] using [REDACTED:api_key]",
+      "enabled_patterns": []
+    },
+    {
+      "id": "empty_string_passes_through",
+      "input": "",
+      "expected_output": "",
+      "enabled_patterns": []
+    },
+    {
+      "id": "no_match_clean_text",
+      "input": "Hello world! Just a plain message about the weather.",
+      "expected_output": "Hello world! Just a plain message about the weather.",
+      "enabled_patterns": []
+    },
+    {
+      "id": "secret_assignment_password_eq",
+      "input": "connect failed: password=hunter2 host=db1",
+      "expected_output": "connect failed: [REDACTED:secret] host=db1",
+      "enabled_patterns": []
+    },
+    {
+      "id": "secret_assignment_json_quoted",
+      "input": "config {\"password\": \"hunter2\"} loaded",
+      "expected_output": "config {\"[REDACTED:secret]} loaded",
+      "enabled_patterns": []
+    },
+    {
+      "id": "secret_assignment_authorization_bearer",
+      "input": "sending authorization: Bearer abc123def456",
+      "expected_output": "sending [REDACTED:secret]",
+      "enabled_patterns": []
+    },
+    {
+      "id": "secret_assignment_env_var_suffix",
+      "input": "PGPASSWORD=s3cr3t psql -h db",
+      "expected_output": "PG[REDACTED:secret] psql -h db",
+      "enabled_patterns": []
+    },
+    {
+      "id": "secret_assignment_client_secret",
+      "input": "oauth client_secret=abcd1234 exchange",
+      "expected_output": "oauth [REDACTED:secret] exchange",
+      "enabled_patterns": []
+    },
+    {
+      "id": "secret_assignment_llm_token_counts_survive",
+      "input": "usage input_tokens=100 output_tokens=50 total_tokens=150 max_tokens=4096",
+      "expected_output": "usage input_tokens=100 output_tokens=50 total_tokens=150 max_tokens=4096",
+      "enabled_patterns": []
+    },
+    {
+      "id": "secret_assignment_secret_name_survives",
+      "input": "mounting secret_name=my-k8s-secret in pod",
+      "expected_output": "mounting secret_name=my-k8s-secret in pod",
+      "enabled_patterns": []
+    },
+    {
+      "id": "secret_assignment_disabled_by_org",
+      "input": "password=hunter2",
+      "expected_output": "password=hunter2",
+      "enabled_patterns": ["api_key_prefixed", "jwt", "credit_card", "ssn_us"]
+    },
+    {
+      "id": "secret_assignment_bare_secret_colon_is_a_marker_not_an_assignment",
+      "input": "offloaded org-a-secret:xxxxxxxxxxxxxxxx to blob",
+      "expected_output": "offloaded org-a-secret:xxxxxxxxxxxxxxxx to blob",
+      "enabled_patterns": []
+    },
+    {
+      "id": "secret_assignment_k8s_secret_marker_survives",
+      "input": "k8s-secret: mounted at /var/run",
+      "expected_output": "k8s-secret: mounted at /var/run",
+      "enabled_patterns": []
+    },
+    {
+      "id": "secret_assignment_bare_secret_with_equals_is_redacted",
+      "input": "env secret=hunter2 set",
+      "expected_output": "env [REDACTED:secret] set",
+      "enabled_patterns": []
+    },
+    {
+      "id": "secret_assignment_compound_with_colon_is_redacted",
+      "input": "yaml client_secret: abcd1234",
+      "expected_output": "yaml [REDACTED:secret]",
+      "enabled_patterns": []
+    }
+  ]
+}
