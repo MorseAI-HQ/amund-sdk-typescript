@@ -11,6 +11,9 @@ export const SpanType = {
   TOOL: "tool",
   HTTP: "http",
   DB: "db",
+  // MHQ-1404: auto-instrumented broker publish spans. Infra like db/http: non-billable
+  // (ADR-033 D1) and never sets trace status. Matches Python `SpanType.QUEUE`.
+  QUEUE: "queue",
   CUSTOM: "custom",
   MEMORY: "memory",
   // MHQ-482: matches Python's `SpanType.RETRIEVER` (apps/sdk/python/src/morse_ai/spans.py).
@@ -66,6 +69,7 @@ export interface SpanData {
   input_tokens?: number;
   output_tokens?: number;
   cached_input_tokens?: number;
+  reasoning_tokens?: number;
   cache_write_tokens?: number;
   total_tokens?: number;
   cost_usd?: number;

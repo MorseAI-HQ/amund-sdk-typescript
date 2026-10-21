@@ -79,6 +79,8 @@ describe("public API surface", () => {
     expect(typeof morse.shutdown).toBe("function");
     expect(typeof morse.injectTraceparent).toBe("function");
     expect(typeof morse.extractTraceparent).toBe("function");
+    expect(typeof morse.linkRecord).toBe("function");
+    expect(typeof morse.setPrompt).toBe("function");
     expect(typeof morse.version).toBe("string");
   });
 });
@@ -393,7 +395,9 @@ describe("run() thread/user/source attribution (MHQ-748)", () => {
     await morse.runTraced({ agentName: "copilot-agent", source: "copilot" }, async () => "ok");
 
     const trace = lastTrace() as unknown as { resource?: Record<string, unknown> };
-    expect(trace.resource).toEqual({ "morse_ai.source": "copilot" });
+    // `git.revision` (ATTR-06) rides the same envelope when the checkout/CI has one, so
+    // assert the source label rather than the whole object.
+    expect(trace.resource).toMatchObject({ "morse_ai.source": "copilot" });
   });
 
   it("silently ignores an invalid `source` value", async () => {
@@ -405,7 +409,8 @@ describe("run() thread/user/source attribution (MHQ-748)", () => {
     );
 
     const trace = lastTrace() as unknown as { resource?: Record<string, unknown> };
-    expect(trace.resource).toBeUndefined();
+    // Absence of the label is the signal; `git.revision` may legitimately be present (ATTR-06).
+    expect(trace.resource?.["morse_ai.source"]).toBeUndefined();
   });
 });
 

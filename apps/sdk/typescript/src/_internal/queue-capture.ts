@@ -3,7 +3,7 @@
  * half of Python's `queue_capture.py`.
  *
  * Producer side (default-on, active trace only)
- *   Publishing inside a Morse trace records a `custom` span named
+ *   Publishing inside a Morse trace records a `queue` span named
  *   `publish <destination>` with OTel messaging attributes in metadata
  *   (`messaging.system`, `messaging.operation.type`,
  *   `messaging.destination.name`) and injects a W3C `traceparent`: into the
@@ -54,7 +54,7 @@ function publishSpan(system: string, destination: string | undefined): DetachedS
   if (!admitInfraCall("queue")) return null;
   return startDetachedSpan({
     name: destination ? `publish ${destination}` : "publish",
-    type: "custom",
+    type: "queue",
     metadata: {
       "messaging.system": system,
       "messaging.operation.type": "publish",

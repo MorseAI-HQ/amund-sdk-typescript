@@ -7,10 +7,10 @@
  *
  * ```ts
  * import { MorseCallbackHandler } from "@morsehq-dev/sdk/langchain";
- * import { runAsync } from "@morsehq-dev/sdk"; // or morse.run()
+ * import * as morse from "@morsehq-dev/sdk";
  *
  * const handler = new MorseCallbackHandler({ agentName: "my-agent" });
- * await runAsync({ agentName: "my-agent" }, async () => {
+ * await morse.run({ agentName: "my-agent" }, async () => {
  *   await chain.invoke(input, { callbacks: [handler] });
  * });
  * ```
@@ -31,7 +31,7 @@
  *    (`_internal/tracing.ts`), which only supports the `als.run(store, fn)`
  *    callback shape — there is no way to open a trace and leave it open
  *    across separate, unwrapped callback calls. Callers MUST wrap the
- *    LangChain invocation in `morse.run()` / `runAsync()`. This mirrors the
+ *    LangChain invocation in `morse.run()` / `morse.runTraced()`. This mirrors the
  *    constraint the existing `../langgraph/` adapter already operates under
  *    (see its file-header comments) — every span helper silently no-ops
  *    (returns `null`) when there is no active trace, exactly like this file.
@@ -66,7 +66,8 @@
 import { absorbErrorsSync } from "../_internal/errors";
 import { buildDocuments } from "../_internal/retrieval-documents";
 import type { SpanHandle } from "../_internal/tracing";
-import { adoptThreadId, startSpan } from "../_internal/tracing";
+import { adoptFrameworkRoot, adoptThreadId, startSpan, withParentSpan } from "../_internal/tracing";
+import { isLegacyIdentity } from "../_internal/agent-name";
 import { decomposeOpenAiMessages } from "../_agent-sdk-common/context-decomposer";
 import { captureLangChainMessages } from "../_internal/llm-io";
 import type {
@@ -97,7 +98,7 @@ const MAX_STATE_PAYLOAD_BYTES = 64 * 1024; // 64 KB JSON
 export interface MorseCallbackHandlerOptions {
   /** Falls back to `"langchain-agent"` when unset. Only used for documentation
    * purposes on this handler instance — the actual trace's agent name is set
-   * by whatever `morse.run()` / `runAsync()` call wraps the invocation. */
+   * by whatever `morse.run()` / `morse.runTraced()` call wraps the invocation. */
   agentName?: string;
 }
 
@@ -380,11 +381,28 @@ export class MorseCallbackHandler implements CallbackHandlerSurface {
 
   public readonly agentName: string;
 
+  /** The `agentName` option when the caller passed one (the default placeholder does not count). */
+  private readonly explicitAgentName: string | undefined;
+
   /** Map of `runId` → open `SpanHandle`, spanning chain/llm/tool/retriever
    * spans together (mirrors Python's single `_span_stack` dict). */
   private readonly spanStack: Map<string, SpanHandle> = new Map();
 
+  /** Callback parent of the start event being handled (sync, set by the handle* entry points). */
+  private pendingParentRunId: string | undefined;
+
+  /** @internal */
+  _withParent(parentRunId: string | undefined, fn: () => void): void {
+    this.pendingParentRunId = parentRunId;
+    try {
+      fn();
+    } finally {
+      this.pendingParentRunId = undefined;
+    }
+  }
+
   constructor(options?: MorseCallbackHandlerOptions) {
+    this.explicitAgentName = options?.agentName || undefined;
     this.agentName =
       options?.agentName && options.agentName.length > 0 ? options.agentName : DEFAULT_AGENT_NAME;
   }
@@ -402,7 +420,17 @@ export class MorseCallbackHandler implements CallbackHandlerSurface {
   ): SpanHandle | null {
     if (typeof runId !== "string" || runId.length === 0) return null;
     const metadata: Record<string, unknown> = { ...(extraMetadata ?? {}), adapter: ADAPTER };
-    const handle = startSpan({ name, type, metadata });
+    // AID-02: a chain is a span, never an agent (legacy keeps the old `agent` typing).
+    const isChain = type === "agent" && !isLegacyIdentity();
+    if (isChain) metadata.span_kind = "chain";
+    // AID-05: parent by callback parentage, not by whatever opened last.
+    const parentSpanId =
+      this.pendingParentRunId === undefined
+        ? undefined
+        : this.spanStack.get(this.pendingParentRunId)?.span.span_id;
+    const handle = withParentSpan(parentSpanId, () =>
+      startSpan({ name, type: isChain ? "custom" : type, metadata }),
+    );
     if (handle === null) return null;
     const wrapped = coerceStateValue(inputData);
     if (wrapped !== undefined) handle.span.input_data = wrapped;
@@ -448,7 +476,17 @@ export class MorseCallbackHandler implements CallbackHandlerSurface {
     _tags?: string[],
     metadata?: Record<string, unknown>,
   ): void {
-    _handleChainStart(this, chain, inputs, runId, metadata);
+    this._withParent(_parentRunId, () => {
+      // AID-01: the outermost chain names the root agent (generic names are ignored).
+      if (_parentRunId === undefined && !isLegacyIdentity()) {
+        try {
+          adoptFrameworkRoot(this.explicitAgentName ?? resolveNameIdFirst(chain, "chain"));
+        } catch {
+          /* telemetry must never throw into the host framework */
+        }
+      }
+      _handleChainStart(this, chain, inputs, runId, metadata);
+    });
   }
 
   handleChainEnd(outputs: Record<string, unknown>, runId: string): void {
@@ -467,10 +505,10 @@ export class MorseCallbackHandler implements CallbackHandlerSurface {
     llm: SerializedLike,
     prompts: string[],
     runId: string,
-    _parentRunId?: string,
+    parentRunId?: string,
     extraParams?: Record<string, unknown>,
   ): void {
-    _handleLLMStart(this, llm, prompts, runId, extraParams);
+    this._withParent(parentRunId, () => _handleLLMStart(this, llm, prompts, runId, extraParams));
   }
 
   handleChatModelStart(
@@ -501,8 +539,8 @@ export class MorseCallbackHandler implements CallbackHandlerSurface {
   /*  Tool callbacks                                                        */
   /* ---------------------------------------------------------------------- */
 
-  handleToolStart(tool: SerializedLike, input: string, runId: string): void {
-    _handleToolStart(this, tool, input, runId);
+  handleToolStart(tool: SerializedLike, input: string, runId: string, parentRunId?: string): void {
+    this._withParent(parentRunId, () => _handleToolStart(this, tool, input, runId));
   }
 
   handleToolEnd(output: unknown, runId: string): void {
@@ -517,8 +555,13 @@ export class MorseCallbackHandler implements CallbackHandlerSurface {
   /*  Retriever callbacks (@beta — subject to change before SDK v1.0)       */
   /* ---------------------------------------------------------------------- */
 
-  handleRetrieverStart(retriever: SerializedLike, query: string, runId: string): void {
-    _handleRetrieverStart(this, retriever, query, runId);
+  handleRetrieverStart(
+    retriever: SerializedLike,
+    query: string,
+    runId: string,
+    parentRunId?: string,
+  ): void {
+    this._withParent(parentRunId, () => _handleRetrieverStart(this, retriever, query, runId));
   }
 
   handleRetrieverEnd(documents: DocumentLike[], runId: string): void {
@@ -852,8 +895,13 @@ export async function getCallbackHandlerClass(): Promise<typeof MorseCallbackHan
       super();
       this._av = new MorseCallbackHandler(options);
     }
-    handleChainStart(chain: SerializedLike, inputs: Record<string, unknown>, runId: string): void {
-      this._av.handleChainStart(chain, inputs, runId);
+    handleChainStart(
+      chain: SerializedLike,
+      inputs: Record<string, unknown>,
+      runId: string,
+      parentRunId?: string,
+    ): void {
+      this._av.handleChainStart(chain, inputs, runId, parentRunId);
     }
     handleChainEnd(outputs: Record<string, unknown>, runId: string): void {
       this._av.handleChainEnd(outputs, runId);
@@ -885,8 +933,13 @@ export async function getCallbackHandlerClass(): Promise<typeof MorseCallbackHan
     handleLLMError(err: unknown, runId: string): void {
       this._av.handleLLMError(err, runId);
     }
-    handleToolStart(tool: SerializedLike, input: string, runId: string): void {
-      this._av.handleToolStart(tool, input, runId);
+    handleToolStart(
+      tool: SerializedLike,
+      input: string,
+      runId: string,
+      parentRunId?: string,
+    ): void {
+      this._av.handleToolStart(tool, input, runId, parentRunId);
     }
     handleToolEnd(output: unknown, runId: string): void {
       this._av.handleToolEnd(output, runId);
@@ -894,8 +947,13 @@ export async function getCallbackHandlerClass(): Promise<typeof MorseCallbackHan
     handleToolError(err: unknown, runId: string): void {
       this._av.handleToolError(err, runId);
     }
-    handleRetrieverStart(retriever: SerializedLike, query: string, runId: string): void {
-      this._av.handleRetrieverStart(retriever, query, runId);
+    handleRetrieverStart(
+      retriever: SerializedLike,
+      query: string,
+      runId: string,
+      parentRunId?: string,
+    ): void {
+      this._av.handleRetrieverStart(retriever, query, runId, parentRunId);
     }
     handleRetrieverEnd(documents: DocumentLike[], runId: string): void {
       this._av.handleRetrieverEnd(documents, runId);

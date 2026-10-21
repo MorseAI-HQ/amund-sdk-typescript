@@ -45,11 +45,26 @@
  *   package and exported directly to the same `NodeTracerProvider`).
  */
 
-import { resolveAgentName } from "./agent-name";
+import {
+  isFrameworkNodeName,
+  isLegacyIdentity,
+  resolveAgentIdentity,
+  type IdentitySource,
+} from "./agent-name";
+import {
+  addPromptRef,
+  mergeRecordKeys,
+  normalizeAgentVersion,
+  normalizePromptRef,
+  safeEntries,
+  warnPromptRejected,
+  type PromptRef,
+} from "./attribution";
 import { isLegacyTransport, isValidInternalSource } from "./env";
 import { emitTraceEntry, isOtelAvailable, withOtelSpanContext } from "./otel-provider";
 import { report, setRedactionConfig as setDiagnosticsRedactionConfig } from "./diagnostics";
 import { buildRedactionConfig, type RedactionConfig, redactValue } from "./redaction";
+import { getGitRevision, getServiceVersion } from "./revision";
 import type { SpanData, SpanStatus, SpanType } from "./spans";
 import { generateSpanId, generateTraceId, nowIso } from "./spans";
 import { extractTraceparent } from "../propagation";
@@ -61,6 +76,10 @@ import { extractTraceparent } from "../propagation";
 export interface TraceState {
   traceId: string;
   agentName: string;
+  // AID-01: which ladder rung produced `agentName`. Absent under MORSE_AGENT_IDENTITY=legacy.
+  identitySource?: IdentitySource;
+  // AID-04: root agent an adapter discovered (graph / starting-agent name). First wins.
+  frameworkRoot?: string;
   spanStack: SpanData[];
   completedSpans: SpanData[];
   // Mutable outcome fields — set by `run()` callers via the returned handle.
@@ -91,6 +110,14 @@ export interface TraceState {
   // `infra-shared.ts`; mirrors Python's `_TraceState.infra_counts/summaries`.
   infraCounts?: Record<string, number>;
   infraSummaries?: Record<string, SpanData>;
+  // ATTR-01/04 (MHQ-1275): business-record keys, declared agent version and
+  // prompt references. Already normalised (see `attribution.ts`) — buildTraceDict
+  // and the OTLP mapper copy them out verbatim.
+  recordKeys?: Record<string, string>;
+  agentVersion?: string;
+  prompts?: PromptRef[];
+  // AID-04: the name passed to `run()` when it differs from the discovered root.
+  appName?: string;
 }
 
 type AlsLike<T> = {
@@ -237,6 +264,26 @@ export function getSource(): string | null {
   return _source;
 }
 
+// Process-level default `agent_version` from `init({ agentVersion })`; a per-run
+// `RunOptions.agentVersion` overrides it. Normalised before storing.
+let _agentVersionDefault: string | undefined;
+
+export function setAgentVersionDefault(value: unknown): void {
+  _agentVersionDefault = normalizeAgentVersion(value);
+}
+
+// SETUP-10: `init({ captureEndUser: true })` opt-in. Off by default: adapters
+// never read the provider's `user` / `metadata.user_id` unless this is set.
+let _captureEndUser = false;
+
+export function setCaptureEndUser(value: unknown): void {
+  _captureEndUser = value === true;
+}
+
+export function isCaptureEndUser(): boolean {
+  return _captureEndUser;
+}
+
 let lastTrace: { trace: unknown; spans: unknown[] } | null = null;
 
 export function getLastTrace(): { trace: unknown; spans: unknown[] } | null {
@@ -381,6 +428,22 @@ function buildTraceDict(
   if (state.userMetadata && Object.keys(state.userMetadata).length > 0) {
     trace.user_metadata = state.userMetadata;
   }
+  // ATTR-01/04: omitted entirely when empty, so an old server and a trace that
+  // declared nothing see the exact payload they always did.
+  if (state.recordKeys && Object.keys(state.recordKeys).length > 0) {
+    trace.record_keys = { ...state.recordKeys };
+  }
+  if (state.agentVersion) trace.agent_version = state.agentVersion;
+  if (state.prompts && state.prompts.length > 0) {
+    trace.prompts = state.prompts.map((p) => ({ ...p }));
+  }
+  // AID-01/AID-04: trace metadata keys `identity_source` and `morse_app` (Wave 1 contract).
+  if (state.identitySource !== undefined || state.appName !== undefined) {
+    trace.metadata = {
+      ...(state.identitySource !== undefined ? { identity_source: state.identitySource } : {}),
+      ...(state.appName !== undefined ? { morse_app: state.appName } : {}),
+    };
+  }
 
   const allSpans = [rootSpan, ...state.completedSpans];
   const spans = allSpans.map((s) => {
@@ -417,6 +480,11 @@ function buildTraceDict(
   if (state.framework) {
     resource["morse_ai.framework"] = state.framework;
   }
+  // ATTR-06: process-level deployment identity, detected once at init().
+  const gitRevision = getGitRevision();
+  if (gitRevision) resource["git.revision"] = gitRevision;
+  const serviceVersion = getServiceVersion();
+  if (serviceVersion) resource["service.version"] = serviceVersion;
   if (Object.keys(resource).length > 0) {
     (out as Record<string, unknown>).resource = resource;
   }
@@ -497,6 +565,11 @@ export interface RunOptions {
    * `_internal/agent-name.ts`.
    */
   agentName?: string;
+  /**
+   * Alias of `agentName` (MHQ-1415): `run({ name })` is what the runbooks and the
+   * Python-style call shape suggest, and it used to be silently ignored.
+   */
+  name?: string;
   /** Framework-native name an integration knows (graph/agent name). Ranks below `agentName`. */
   frameworkAgentName?: string;
   /** W3C traceparent value to continue an upstream trace, when available. */
@@ -530,6 +603,21 @@ export interface RunOptions {
    * Mirrors Python's `run(source=...)`.
    */
   source?: string;
+  /**
+   * Business-record keys to link this trace to, e.g. `{ zendesk_ticket: "4812" }`
+   * (ATTR-01). Key types are lower-cased and must match
+   * `^[a-z0-9][a-z0-9_.-]{0,63}$`; values are strings or numbers of 1-256
+   * characters. Invalid pairs are dropped, never thrown; at most 20 per trace.
+   * Use opaque ids, not personal data. More can be added mid-trace with
+   * `linkRecord()`. Mirrors Python's `run(record_keys=...)`.
+   */
+  recordKeys?: Record<string, string | number>;
+  /**
+   * Version of the agent this run belongs to (ATTR-04), e.g. a release tag.
+   * Overrides the `init({ agentVersion })` default for this run. Truncated to
+   * 128 characters. Mirrors Python's `run(agent_version=...)`.
+   */
+  agentVersion?: string;
 }
 
 export interface RunHandle {
@@ -571,16 +659,18 @@ function startTrace(opts: RunOptions): {
   }
   if (!traceId) traceId = generateTraceId();
 
-  const agentName = resolveAgentName({
-    explicit: opts.agentName,
+  const identity = resolveAgentIdentity({
+    explicit: opts.agentName ?? opts.name,
     framework: opts.frameworkAgentName,
   });
+  const agentName = identity.name;
   const state: TraceState = {
     traceId,
     agentName,
     spanStack: [],
     completedSpans: [],
   };
+  if (!isLegacyIdentity()) state.identitySource = identity.source;
   if (opts.threadId !== undefined) state.threadId = opts.threadId;
   if (opts.userId !== undefined) state.userId = opts.userId;
   if (opts.userMetadata) {
@@ -590,6 +680,19 @@ function startTrace(opts: RunOptions): {
   // value falls through to whatever the process has set (never throws).
   if (isValidInternalSource(opts.source)) {
     state.sourceOverride = opts.source;
+  }
+  // ATTR-01/04. Both are normalised without ever throwing, so a bad value costs
+  // that value, not the callback the trace wraps.
+  try {
+    if (opts.recordKeys !== undefined) {
+      const keys: Record<string, string> = {};
+      mergeRecordKeys(keys, safeEntries(opts.recordKeys));
+      if (Object.keys(keys).length > 0) state.recordKeys = keys;
+    }
+    const agentVersion = normalizeAgentVersion(opts.agentVersion) ?? _agentVersionDefault;
+    if (agentVersion !== undefined) state.agentVersion = agentVersion;
+  } catch (err) {
+    report(err, { fingerprint: "morse.tracing.run.attribution" });
   }
   const rootSpan: SpanData = {
     trace_id: traceId,
@@ -621,10 +724,64 @@ function endTrace(
   } else {
     finalizeSpan(rootSpan, startMono);
   }
+  applyFrameworkRoot(state, rootSpan);
   // MHQ-1157: a clean exit is not proof of success, so it sends no `success`
   // (the server would store it as provenance 'developer').
   const dict = buildTraceDict(state, rootSpan);
   sendTrace(dict);
+}
+
+/**
+ * AID-01/AID-04: fold the root an adapter discovered into the trace identity.
+ *
+ * A framework-native root outranks the service name and the entry script, so it
+ * replaces them. `run("name")` outranks it as a label only: the name moves to
+ * `appName` (`morse.app`) and the discovered root stays the agent, so the topology
+ * keeps one root instead of forking a second agent above it. No-op in legacy mode.
+ */
+function applyFrameworkRoot(state: TraceState, rootSpan: SpanData): void {
+  const root = state.frameworkRoot;
+  if (!root || state.identitySource === undefined || root === state.agentName) return;
+  if (state.identitySource === "run") state.appName = state.agentName;
+  state.agentName = root;
+  state.identitySource = "framework";
+  rootSpan.name = root;
+}
+
+/**
+ * Record the root agent a framework adapter found (graph name, starting agent) on the
+ * active trace. First call wins; framework plumbing names (`LangGraph`, `chain`) never
+ * count. Never throws.
+ */
+export function adoptFrameworkRoot(name: unknown): void {
+  const state = getActiveTraceState();
+  if (state === null || state.frameworkRoot !== undefined) return;
+  if (typeof name !== "string" || name.trim() === "" || isFrameworkNodeName(name)) return;
+  state.frameworkRoot = name.trim();
+}
+
+/** The root an adapter adopted on the active trace, if any. */
+export function getFrameworkRoot(): string | undefined {
+  return getActiveTraceState()?.frameworkRoot;
+}
+
+let pendingParentSpanId: string | undefined;
+
+/**
+ * AID-05: run `fn` with `startSpan` parenting its span to `parentSpanId` instead of the
+ * top of the span stack. Callback frameworks (LangGraph, LangChain) run branches
+ * concurrently, so "top of stack" is whichever sibling started last. A span parented
+ * this way is not pushed on the stack either, so siblings cannot adopt it.
+ * Synchronous only: the override is consumed by the first span `fn` starts.
+ */
+export function withParentSpan<T>(parentSpanId: string | undefined, fn: () => T): T {
+  if (parentSpanId === undefined) return fn();
+  pendingParentSpanId = parentSpanId;
+  try {
+    return fn();
+  } finally {
+    pendingParentSpanId = undefined;
+  }
 }
 
 function errToString(e: unknown): string {
@@ -771,6 +928,85 @@ export function setOutcome(success: boolean, outcome?: string): void {
 }
 
 /**
+ * Link the active trace to a business record (ATTR-01): a ticket, order, PR,
+ * anything an outcome can later be reported against by id.
+ *
+ *     morse.linkRecord("zendesk_ticket", ticket.id);
+ *
+ * `keyType` is lower-cased and must match `^[a-z0-9][a-z0-9_.-]{0,63}$`;
+ * `keyValue` is a string or number of 1-256 characters after trimming. Calls
+ * accumulate (the same type again replaces its value); a trace keeps at most 20.
+ * Invalid input is dropped with a one-time warning, never thrown. Use opaque
+ * ids, not personal data such as an email address. No-op outside a trace.
+ */
+export function linkRecord(keyType: string, keyValue: string | number): void {
+  try {
+    const state = getActiveTraceState();
+    if (state === null) return;
+    if (state.recordKeys === undefined) state.recordKeys = {};
+    mergeRecordKeys(state.recordKeys, [[keyType, keyValue]]);
+  } catch (err) {
+    report(err, { fingerprint: "morse.tracing.link_record" });
+  }
+}
+
+/**
+ * Declare that the active trace used a prompt (ATTR-04). Inside a
+ * `morse.span()` block the reference is pinned to that span; at the top level of
+ * a run it belongs to the trace. `version` is optional — teams that keep prompts
+ * in code can omit it and rely on `agentVersion` or the git revision. Anything
+ * that is not an integer ≥1 is dropped and the name kept. A trace keeps at most
+ * 20 references. Never throws; no-op outside a trace.
+ *
+ * Over OTLP a span carries one reference, so when several are set on the same
+ * span the last is exported (the legacy JSON path keeps all).
+ */
+export function setPrompt(name: string, version?: number): void {
+  try {
+    const state = getActiveTraceState();
+    if (state === null) return;
+    const top = state.spanStack[state.spanStack.length - 1];
+    // spanStack[0] is the root span: a call made directly in run() is trace-level.
+    const spanId = state.spanStack.length > 1 ? top?.span_id : undefined;
+    const ref = normalizePromptRef(name, version, spanId);
+    if (ref === null) {
+      warnPromptRejected();
+      return;
+    }
+    if (state.prompts === undefined) state.prompts = [];
+    addPromptRef(state.prompts, ref);
+  } catch (err) {
+    report(err, { fingerprint: "morse.tracing.set_prompt" });
+  }
+}
+
+/**
+ * UP-09: link the run that is active NOW to a prompt `getPrompt()` just resolved.
+ * Same path as `setPrompt` (span-pinned inside `span()`, trace-level otherwise) but the
+ * ref is tagged `link_source: "fetch"`. Returns true when a run was active and the
+ * reference was recorded (or upgraded from a `setPrompt` ref). Never throws.
+ *
+ * @internal
+ */
+export function linkFetchedPrompt(name: string, version: number): boolean {
+  try {
+    const state = getActiveTraceState();
+    if (state === null) return false;
+    const top = state.spanStack[state.spanStack.length - 1];
+    const spanId = state.spanStack.length > 1 ? top?.span_id : undefined;
+    const ref = normalizePromptRef(name, version, spanId);
+    if (ref === null) return false;
+    ref.link_source = "fetch";
+    if (state.prompts === undefined) state.prompts = [];
+    addPromptRef(state.prompts, ref);
+    return true;
+  } catch (err) {
+    report(err, { fingerprint: "morse.tracing.link_fetched_prompt" });
+    return false;
+  }
+}
+
+/**
  * Set `threadId` on the active trace when nothing has claimed it yet.
  *
  * MHQ-1029 (the TypeScript half of MHQ-1022): no adapter populated `threadId`,
@@ -881,19 +1117,21 @@ export function startSpan(opts: SpanOptions): SpanHandle | null {
     }
     return null;
   }
+  const explicitParent = pendingParentSpanId;
+  pendingParentSpanId = undefined;
   const parent = state.spanStack[state.spanStack.length - 1];
   const span: SpanData = {
     trace_id: state.traceId,
     span_id: generateSpanId(),
     type: opts.type ?? "custom",
     name: opts.name,
-    parent_span_id: parent?.span_id,
+    parent_span_id: explicitParent ?? parent?.span_id,
     started_at: nowIso(),
     status: "completed",
     metadata: opts.metadata,
   };
   const startMono = nowMonotonic();
-  state.spanStack.push(span);
+  if (explicitParent === undefined) state.spanStack.push(span);
   return {
     span,
     end(error?: unknown): void {
@@ -999,6 +1237,8 @@ export async function spanAsync<T>(
 export function _resetForTesting(): void {
   browserState = null;
   lastTrace = null;
+  _agentVersionDefault = undefined;
+  _captureEndUser = false;
   redactionConfig = buildRedactionConfig();
   // We do not reset `als` because re-loading it is expensive and the
   // store is process-scoped anyway.

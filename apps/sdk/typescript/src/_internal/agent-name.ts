@@ -22,7 +22,58 @@
 
 export const DEFAULT_AGENT_NAME = "default-agent";
 
-const GENERIC_SCRIPT_NAMES: ReadonlySet<string> = new Set(["node", "index", "main", "server"]);
+// AID-01: also framework launcher scripts (Next.js `start-server`), which name no app.
+const GENERIC_SCRIPT_NAMES: ReadonlySet<string> = new Set([
+  "node",
+  "index",
+  "main",
+  "server",
+  "start-server",
+  "next",
+  "next-server",
+  "ts-node",
+  "tsx",
+]);
+
+/**
+ * AID-02/AID-03: names frameworks give their own plumbing. Never an agent identity,
+ * and adapters record these as chain spans, not agent spans. Mirrors the API denylist
+ * (`apps/api/apps/agents/framework_nodes.py`).
+ */
+const FRAMEWORK_NODE_NAMES: ReadonlySet<string> = new Set([
+  "chain",
+  "__start__",
+  "__end__",
+  "tools",
+  "agent",
+  "route",
+  "model",
+  "langgraph",
+  "langchain",
+  "runnablesequence",
+  "runnablelambda",
+  "runnableparallel",
+  "runnablepassthrough",
+  "chatprompttemplate",
+  "prompttemplate",
+  "stroutputparser",
+  "jsonoutputparser",
+  "toolnode",
+]);
+
+export function isFrameworkNodeName(name: unknown): boolean {
+  const n = clean(name);
+  if (!n) return false;
+  const bare = n.replace(/\s*\[(langchain|langgraph)\]\s*$/i, "").toLowerCase();
+  return FRAMEWORK_NODE_NAMES.has(bare) || /^\[(langchain|langgraph)\]$/i.test(n);
+}
+
+/** `MORSE_AGENT_IDENTITY=legacy` restores pre-0.8 naming (AID-09). Read per call. */
+export function isLegacyIdentity(env: NodeJS.ProcessEnv = process.env): boolean {
+  return clean(env?.MORSE_AGENT_IDENTITY)?.toLowerCase() === "legacy";
+}
+
+export type IdentitySource = "run" | "framework" | "service_name" | "entry_script" | "default";
 
 function clean(value: unknown): string | undefined {
   if (typeof value !== "string") return undefined;
@@ -71,12 +122,22 @@ export interface ResolveAgentNameOptions {
   argv?: readonly string[];
 }
 
+/** The ladder with the rung that won, so unnamed agents can be flagged (AID-01). */
+export function resolveAgentIdentity(opts: ResolveAgentNameOptions = {}): {
+  name: string;
+  source: IdentitySource;
+} {
+  const explicit = clean(opts.explicit);
+  if (explicit) return { name: explicit, source: "run" };
+  const framework = clean(opts.framework);
+  if (framework) return { name: framework, source: "framework" };
+  const service = readEnvServiceName(opts.env);
+  if (service) return { name: service, source: "service_name" };
+  const script = entryScriptName(opts.argv);
+  if (script) return { name: script, source: "entry_script" };
+  return { name: DEFAULT_AGENT_NAME, source: "default" };
+}
+
 export function resolveAgentName(opts: ResolveAgentNameOptions = {}): string {
-  return (
-    clean(opts.explicit) ??
-    clean(opts.framework) ??
-    readEnvServiceName(opts.env) ??
-    entryScriptName(opts.argv) ??
-    DEFAULT_AGENT_NAME
-  );
+  return resolveAgentIdentity(opts).name;
 }

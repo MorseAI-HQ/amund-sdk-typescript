@@ -63,6 +63,66 @@ await morse.run({ agentName: "lead-qualifier" }, async (handle) => {
 `record()`/`run()`/`span()` all send real OpenTelemetry spans over OTLP
 by default — see [Transport](#transport) below.
 
+## Linking runs to business records and versions
+
+Four small calls let Morse tie a run to the record it worked on and to the
+code that produced it. All are optional, additive, and never throw.
+
+```ts
+morse.init({ apiKey: process.env.MORSE_API_KEY, agentVersion: "2026.10.1" });
+
+await morse.runTraced(
+  {
+    agentName: "support-triage",
+    recordKeys: { zendesk_ticket: "4812" }, // known when the run starts
+    agentVersion: "2026.10.2-canary", // overrides the init() default for this run
+  },
+  async () => {
+    morse.linkRecord("github_pr", 1123); // or learned mid-run; calls accumulate
+
+    await morse.spanAsync({ name: "classify", type: "llm" }, async () => {
+      morse.setPrompt("triage-classifier", 7); // attached to this span
+      /* ... */
+    });
+    morse.setPrompt("triage-router"); // version is optional; attached to the trace
+  },
+);
+```
+
+- `linkRecord(keyType, keyValue)` / `recordKeys` link the trace to a business
+  record so an outcome reported later against that id can find the run. A key
+  type is lower-cased and must match `^[a-z0-9][a-z0-9_.-]{0,63}$`; a value is a
+  string or number of 1-256 characters. A trace keeps at most 20 keys. Invalid
+  pairs are dropped with a one-time warning, never thrown.
+  **Use opaque ids (a ticket number, an order id), not personal data** such as an
+  email address or a name.
+- `agentVersion` (on `init()` and per run, up to 128 characters) declares which
+  release of the agent ran.
+- `setPrompt(name, version?)` records which prompt a run used. Inside a
+  `span()` it attaches to that span, otherwise to the trace. `version` must be an
+  integer of at least 1; teams that keep prompts in code can omit it and rely on
+  `agentVersion` or the git revision. At most 20 references per trace. OTLP
+  carries one prompt reference per span, so if you set several inside one span only
+  the last is exported — use one `span()` per prompt.
+- All four are no-ops outside a trace.
+
+**Git revision and service version** are picked up automatically, with no code.
+The revision is the first of `MORSE_GIT_REVISION`, `GITHUB_SHA`, `CI_COMMIT_SHA`,
+`RAILWAY_GIT_COMMIT_SHA`, `VERCEL_GIT_COMMIT_SHA`, `RENDER_GIT_COMMIT` or
+`SOURCE_VERSION` that is set, otherwise `git rev-parse HEAD` — and that last step
+runs only on Node, only when a `git` binary and checkout are present, and gives up
+after 500 ms. It is never attempted in browser or edge bundles. **In a Docker image
+there is usually no `.git` directory, so pass the revision in at build time**:
+
+```dockerfile
+ARG GIT_SHA
+ENV MORSE_GIT_REVISION=$GIT_SHA
+```
+
+`service.version` is read from `OTEL_RESOURCE_ATTRIBUTES` (for example
+`OTEL_RESOURCE_ATTRIBUTES=service.version=2.4.1`); there is no `init()` option for it.
+Both are detected once at `init()` and cached.
+
 ## Zero-config instrumentation
 
 Once `morse.init()` runs (or `MORSE_API_KEY` is set in the environment),
@@ -132,6 +192,19 @@ no-op on a client if a global auto-detect install is already active
 (no double-recording). Pass `{ summarize: true }` to also emit a
 sibling `memory` span per call.
 
+### `@morsehq-dev/sdk/openai` — OpenAI (Chat Completions and Responses)
+
+```ts
+import OpenAI from "openai";
+import { wrapOpenAI } from "@morsehq-dev/sdk/openai";
+
+const client = wrapOpenAI(new OpenAI());
+// chat.completions.create and responses.create each emit an `llm` span
+```
+
+`responses.create` is traced as `openai.responses.create` (0.7.0+). Streaming
+(`stream: true`) is not traced on either API yet (MHQ-1407).
+
 ### `@morsehq-dev/sdk/anthropic-agent-sdk` — Claude Agent SDK
 
 Wrap the package's top-level `query` and call the returned function in its
@@ -195,14 +268,14 @@ const result = await graph.invoke(input, { callbacks: [handler] });
 `MorseCallbackHandler` for `@langchain/core` outside a LangGraph graph
 — a structural sibling of the `langgraph` adapter, not a subclass.
 Doesn't auto-create a trace when none is active; wrap the invocation in
-`morse.run()`/`runAsync()`.
+`morse.run()`.
 
 ```ts
 import { MorseCallbackHandler } from "@morsehq-dev/sdk/langchain";
-import { runAsync } from "@morsehq-dev/sdk";
+import * as morse from "@morsehq-dev/sdk";
 
 const handler = new MorseCallbackHandler({ agentName: "my-agent" });
-await runAsync({ agentName: "my-agent" }, async () => {
+await morse.run({ agentName: "my-agent" }, async () => {
   await chain.invoke(input, { callbacks: [handler] });
 });
 ```
@@ -248,6 +321,42 @@ dashboards never branch on adapter origin. `subagent.spawn` and `hook`
 are modeled as `type=agent` + `metadata.spawn_kind="subagent"` and
 `type=tool` + `metadata.tool_kind="hook"` respectively until the
 backend `SpanType` enum gains native variants.
+
+## Fetching hosted prompts
+
+```ts
+import * as morse from "@morsehq/sdk";
+
+const prompt = await morse.getPrompt("triage"); // label "production"
+await morse.getPrompt("triage", { version: 3 }); // or pin a version
+const cached = await morse.getPrompt("triage", { cacheTtlSeconds: 60 }); // optional in-memory cache
+const again = await morse.getPrompt("triage", { ifNoneMatch: prompt.etag });
+if (again.notModified) {
+  /* 304: only `etag` is set */
+}
+```
+
+`getPrompt` is a thin GET: no retries, no fallback. It rejects with `PromptAccessError` (403, the key needs the
+`prompts:read` scope), `PromptNotFoundError` (404) and `PromptRateLimitError` (429, `.retryAfter`);
+network failures surface as `fetch`'s own error. Passing both `label` and `version` throws a
+`TypeError`.
+
+**Linking.** If a run is active when you call `getPrompt`, the run is linked to the returned
+`name@version` (a prompt reference tagged `link_source: "fetch"`), so Morse can show which runs used
+which managed version. This applies to a fresh fetch, an SDK cache hit, and a 304 when the SDK holds
+the cached prompt for that selector. No active run means no link. Pass `{ link: false }` to opt out.
+The first link in a process logs one info line. If you also call `setPrompt` with the same name and
+version in the same span, one reference is kept and it is tagged "fetch".
+
+We recommend caching in some form so Morse is not on your request hot path. You have three options:
+
+1. **Call the API directly** on every use (the default). Responses carry `Cache-Control: max-age=30`.
+2. **Use your own cache**, with a bundled fallback prompt if you want one.
+3. **Pass `cacheTtlSeconds`** for a small process-local LRU. A fresh entry is returned without a
+   request; a stale one is revalidated with `If-None-Match` (a 304 refreshes it). Errors are never
+   masked by stale data, so keep your own fallback if you want one. Unset or `0` (the default) uses
+   no cache, and passing your own `ifNoneMatch` bypasses it.
+   `configurePromptCache({ maxEntries: 256 })` sets the size and `clearPromptCache()` empties it.
 
 ## Cost
 
@@ -328,6 +437,21 @@ init({
 Full reference — every adapter, all `init()` options, configuration,
 troubleshooting — lives at **[docs.morsehq.dev](https://docs.morsehq.dev)**.
 This README stays a quickstart.
+
+## Installing what a release ships (QA / dogfood)
+
+`npm pack` straight from the repo produces `@morsehq/sdk`, a name that is not on
+npm. To test the artifact exactly as a release publishes it:
+
+```bash
+pnpm --filter @morsehq/sdk pack:published          # builds, packs, prints the tarball path
+pnpm --filter @morsehq/sdk pack:published --no-build --out /tmp/sdk-pack
+npm install /path/to/morsehq-dev-sdk-X.Y.Z.tgz     # in a project outside the monorepo
+```
+
+It applies the release workflow's name rewrite (`@morsehq-dev/sdk`) on a staging
+copy, writes the tarball outside the source tree, and never modifies
+`package.json`.
 
 ## Naming
 

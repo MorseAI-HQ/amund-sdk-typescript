@@ -107,6 +107,32 @@ export const emitAgentSpan: (opts: EmitAgentSpanOptions) => SpanHandle | null = 
 ) as (opts: EmitAgentSpanOptions) => SpanHandle | null;
 
 /* ------------------------------------------------------------------------ */
+/*  emitChainSpan                                                            */
+/* ------------------------------------------------------------------------ */
+
+export interface EmitChainSpanOptions {
+  adapter: AdapterName;
+  name: string;
+  attributes?: Record<string, unknown>;
+}
+
+/**
+ * AID-02: a framework-internal node (graph node, runnable, task, turn) is a span, never
+ * an agent. The wire has no `chain` span type, so this is `type=custom` with
+ * `metadata.span_kind="chain"`; it nests under the real agent. Returns `null` when no
+ * trace is active; never throws.
+ */
+export const emitChainSpan: (opts: EmitChainSpanOptions) => SpanHandle | null = absorbErrorsSync(
+  (opts: EmitChainSpanOptions): SpanHandle | null =>
+    startSpan({
+      name: requireNonEmpty(opts.name, "name"),
+      type: "custom",
+      metadata: { ...(opts.attributes ?? {}), adapter: opts.adapter, span_kind: "chain" },
+    }),
+  { fingerprint: "morse.adapters.shared.emitChainSpan" },
+) as (opts: EmitChainSpanOptions) => SpanHandle | null;
+
+/* ------------------------------------------------------------------------ */
 /*  emitLlmSpan                                                              */
 /* ------------------------------------------------------------------------ */
 

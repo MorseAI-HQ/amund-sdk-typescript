@@ -43,33 +43,5 @@
 # own enforced rule (scripts/check-audit-ignore.py) rather than left to
 # silently re-suppress a future regression.
 
-# ACCEPT -- tornado: pulled in transitively by flower (Celery's monitoring
-# dashboard), a dev-only dependency. engineering/DEV_SETUP.md and
-# engineering/LOCAL_DEPLOYMENT.md both list Flower as "Not deployed" — it
-# runs only via `make flower` on a developer's machine, never on Railway
-# (dev or prod), so tornado's HTTP-server surface is never reachable in any
-# running environment.
-# Newly disclosed 2026-09-06, installed 6.5.7, fixed in 6.5.8. Filed as a
-# follow-up to bump tornado (transitively, via flower) rather than blocking
-# unrelated PRs on a dependency with no runtime exposure.
-# expires: 2026-12-05
-CVE-2026-82397
-GHSA-wwv5-g3v4-889x
-GHSA-8423-8fgw-73vq
-
-# ACCEPT -- weasyprint: url_fetcher bypass in write_pdf(xmp_metadata=...) and
-# write_pdf/render(stylesheets=...) — two call sites build a fresh default
-# URLFetcher instead of using the document's restrictive one, allowing
-# file:// reads / SSRF when either param carries an attacker-influenced
-# URL. Morse's only usage (apps/api/apps/billing/pdf.py:58) is a bare
-# `weasyprint.HTML(string=html_string).write_pdf()` — no `xmp_metadata`, no
-# `stylesheets` argument, no custom `url_fetcher` at all — so neither
-# vulnerable code path is ever reached.
-# Installed 69.0, fixed in 70.0. The `weasyprint>=62.0,<70` pin in
-# apps/api/pyproject.toml predates any documented reason (present since the
-# dependency's introduction, no changelog entry explaining the cap) —
-# bumping past it isn't attempted here to avoid trading a non-exploitable
-# finding for an unverified compatibility risk in PDF generation (customer
-# invoices). Revisit the pin's reason before the next re-verification.
-# expires: 2026-12-12
-PYSEC-2026-3940
+# No active Python suppressions. Removed obsolete tornado/weasyprint entries
+# 2026-10-14 after the locked fixed versions and a bare audit were verified.

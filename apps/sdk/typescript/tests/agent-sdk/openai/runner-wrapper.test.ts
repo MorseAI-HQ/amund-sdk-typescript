@@ -12,7 +12,7 @@
  *   - handles the two-mode `instrumentOpenAIAgents` installer correctly.
  */
 
-import { beforeEach, describe, expect, it } from "vitest";
+import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 
 import {
   instrumentOpenAIAgents,
@@ -210,4 +210,13 @@ describe("instrumentOpenAIAgents", () => {
     // but never a truthy module-installed value, and never a thrown error.
     expect(Boolean(result)).toBe(false);
   });
+});
+
+// AID-09: this suite pins the pre-0.8 naming (chains as `agent` spans). The default
+// shape is covered in tests/agent-identity-*.test.ts.
+beforeAll(() => {
+  process.env.MORSE_AGENT_IDENTITY = "legacy";
+});
+afterAll(() => {
+  delete process.env.MORSE_AGENT_IDENTITY;
 });

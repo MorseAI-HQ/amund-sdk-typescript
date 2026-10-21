@@ -257,3 +257,197 @@ describe("wrapOpenAI — error path", () => {
     expect(llm!.status).toBe("failed");
   });
 });
+
+/* ------------------------------------------------------------------------ */
+/*  wrapOpenAI — Responses API (responses.create)                            */
+/* ------------------------------------------------------------------------ */
+
+type AnyRecord = Record<string, unknown>;
+
+function makeResponsesClient(response: AnyRecord | (() => Promise<AnyRecord>)) {
+  const create = vi.fn(async () => (typeof response === "function" ? response() : response));
+  const chatCreate = vi.fn(async () => baseResponse());
+  return {
+    chat: { completions: { create: chatCreate } },
+    responses: { create },
+    _create: create,
+    _chatCreate: chatCreate,
+  } as unknown as OpenAiClientLike & {
+    _create: ReturnType<typeof vi.fn>;
+    _chatCreate: ReturnType<typeof vi.fn>;
+  };
+}
+
+const responsesBody = (over: AnyRecord = {}): AnyRecord => ({
+  id: "resp_1",
+  model: "gpt-4o-mini",
+  output_text: "hello there",
+  output: [],
+  usage: { input_tokens: 20, output_tokens: 8, total_tokens: 28 },
+  ...over,
+});
+
+async function lastLlm(): Promise<AnyRecord> {
+  await new Promise((r) => setTimeout(r, 10));
+  const last = morse._getLastTraceForTesting() as { spans: AnyRecord[] } | null;
+  return last!.spans.find((s) => s.type === "llm") as AnyRecord;
+}
+
+describe("wrapOpenAI — responses.create", () => {
+  it("emits an openai.responses.create llm span with model, tokens and cost (string input)", async () => {
+    morse.init({ apiKey: "av_x" }); // pragma: allowlist secret
+    const client = makeResponsesClient(responsesBody());
+    const wrapped = wrapOpenAI(client);
+
+    const res = (await wrapped.responses!.create({
+      model: "gpt-4o-mini",
+      input: "hi",
+    })) as AnyRecord;
+    expect(res.id).toBe("resp_1");
+
+    const llm = await lastLlm();
+    expect(llm.name).toBe("openai.responses.create");
+    expect(llm.model).toBe("gpt-4o-mini");
+    expect(llm.input_tokens).toBe(20);
+    expect(llm.output_tokens).toBe(8);
+    expect(llm.total_tokens).toBe(28);
+    expect(llm.cost_usd as number).toBeGreaterThan(0);
+    expect(llm.input_data).toEqual({ messages: [{ role: "user", content: "hi" }] });
+    expect(llm.output_data).toEqual({ content: "hello there" });
+  });
+
+  it("list input keeps role-bearing items and skips others", async () => {
+    morse.init({ apiKey: "av_x" }); // pragma: allowlist secret
+    const wrapped = wrapOpenAI(makeResponsesClient(responsesBody()));
+    await wrapped.responses!.create({
+      model: "gpt-4o-mini",
+      input: [
+        { role: "user", content: "first" },
+        { type: "function_call_output", call_id: "c1", output: "42" },
+        { role: "assistant", content: "second" },
+      ],
+    });
+    const llm = await lastLlm();
+    expect(llm.input_data).toEqual({
+      messages: [
+        { role: "user", content: "first" },
+        { role: "assistant", content: "second" },
+      ],
+    });
+  });
+
+  it("instructions become a leading system message", async () => {
+    morse.init({ apiKey: "av_x" }); // pragma: allowlist secret
+    const wrapped = wrapOpenAI(makeResponsesClient(responsesBody()));
+    await wrapped.responses!.create({
+      model: "gpt-4o-mini",
+      instructions: "Be terse",
+      input: "hi",
+    });
+    const llm = await lastLlm();
+    expect(llm.input_data).toEqual({
+      messages: [
+        { role: "system", content: "Be terse" },
+        { role: "user", content: "hi" },
+      ],
+    });
+    const segments = llm.context_segments as AnyRecord[];
+    expect(segments.some((s) => s.source === "system_prompt")).toBe(true);
+  });
+
+  it("captures function_call output items as [tool_call:name] args", async () => {
+    morse.init({ apiKey: "av_x" }); // pragma: allowlist secret
+    const wrapped = wrapOpenAI(
+      makeResponsesClient(
+        responsesBody({
+          output_text: "",
+          output: [
+            { type: "function_call", name: "get_weather", arguments: '{"city":"Paris"}' },
+            { type: "function_call", name: "noargs" },
+          ],
+        }),
+      ),
+    );
+    await wrapped.responses!.create({ model: "gpt-4o-mini", input: "weather?" });
+    const llm = await lastLlm();
+    expect(llm.output_data).toEqual({
+      content: '[tool_call:get_weather] {"city":"Paris"}\n[tool_call:noargs]',
+    });
+  });
+
+  it("maps cached and reasoning tokens", async () => {
+    morse.init({ apiKey: "av_x" }); // pragma: allowlist secret
+    const wrapped = wrapOpenAI(
+      makeResponsesClient(
+        responsesBody({
+          usage: {
+            input_tokens: 100,
+            output_tokens: 50,
+            total_tokens: 150,
+            input_tokens_details: { cached_tokens: 60 },
+            output_tokens_details: { reasoning_tokens: 30 },
+          },
+        }),
+      ),
+    );
+    await wrapped.responses!.create({ model: "gpt-4o-mini", input: "hi" });
+    const llm = await lastLlm();
+    expect(llm.cached_input_tokens).toBe(60);
+    expect(llm.reasoning_tokens).toBe(30);
+  });
+
+  it("re-raises the underlying error and marks the span failed", async () => {
+    morse.init({ apiKey: "av_x" }); // pragma: allowlist secret
+    const client = makeResponsesClient(async () => {
+      throw new Error("responses boom");
+    });
+    const wrapped = wrapOpenAI(client);
+    await expect(wrapped.responses!.create({ model: "gpt-4o-mini", input: "q" })).rejects.toThrow(
+      "responses boom",
+    );
+    const llm = await lastLlm();
+    expect(llm.name).toBe("openai.responses.create");
+    expect(llm.status).toBe("failed");
+  });
+
+  it("a client without `responses` keeps working", async () => {
+    morse.init({ apiKey: "av_x" }); // pragma: allowlist secret
+    const client = makeFakeClient(() => baseResponse());
+    const wrapped = wrapOpenAI(client);
+    expect((wrapped as AnyRecord).responses).toBeUndefined();
+    await wrapped.chat.completions.create({
+      model: "gpt-4o-mini",
+      messages: [{ role: "user", content: "hi" }],
+    });
+    const llm = await lastLlm();
+    expect(llm.name).toBe("openai.chat.completions.create");
+  });
+
+  it("double wrap is idempotent and records one span per call", async () => {
+    morse.init({ apiKey: "av_x" }); // pragma: allowlist secret
+    const client = makeResponsesClient(responsesBody());
+    const w1 = wrapOpenAI(client);
+    const w2 = wrapOpenAI(w1);
+    expect(w2).toBe(w1);
+    await morse.runTraced({ agentName: "outer" }, async () => {
+      await w2.responses!.create({ model: "gpt-4o-mini", input: "hi" });
+      return null;
+    });
+    const last = morse._getLastTraceForTesting() as { spans: AnyRecord[] } | null;
+    expect(last!.spans.filter((s) => s.type === "llm")).toHaveLength(1);
+  });
+
+  it("chat path is unaffected on a client that also has responses", async () => {
+    morse.init({ apiKey: "av_x" }); // pragma: allowlist secret
+    const client = makeResponsesClient(responsesBody());
+    const wrapped = wrapOpenAI(client);
+    await wrapped.chat.completions.create({
+      model: "gpt-4o-mini",
+      messages: [{ role: "user", content: "hi" }],
+    });
+    expect(client._chatCreate).toHaveBeenCalledTimes(1);
+    expect(client._create).not.toHaveBeenCalled();
+    const llm = await lastLlm();
+    expect(llm.name).toBe("openai.chat.completions.create");
+  });
+});

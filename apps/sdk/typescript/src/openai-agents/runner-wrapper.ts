@@ -23,7 +23,13 @@
  */
 
 import { absorbErrorsAsync, absorbErrorsSync } from "../_internal/errors";
-import { adoptThreadId, getActiveTraceState, runAsync as _runAsync } from "../_internal/tracing";
+import {
+  adoptFrameworkRoot,
+  adoptThreadId,
+  getActiveTraceState,
+  runAsync as _runAsync,
+} from "../_internal/tracing";
+import { isLegacyIdentity } from "../_internal/agent-name";
 import { emitAgentSpan } from "../_agent-sdk-common/span-emitter";
 
 import type { AgentLike, OpenAIAgentsModuleLike, RunResultLike, RunnerLike } from "./types";
@@ -325,11 +331,17 @@ function buildPatchedRun(
 
     const runWithSpan = async (): Promise<RunResultLike> => {
       adoptThreadId(resolveThreadId(callOptions));
-      const handle = emitAgentSpan({
-        adapter: "openai-agents",
-        agentName,
-        model,
-      });
+      // AID-01/02: the starting agent is the trace root, recorded once via the trace
+      // processor. Legacy mode keeps this wrapper's own agent span.
+      const legacy = isLegacyIdentity();
+      if (!legacy) adoptFrameworkRoot(options.defaultAgentName ?? frameworkAgentName);
+      const handle = legacy
+        ? emitAgentSpan({
+            adapter: "openai-agents",
+            agentName,
+            model,
+          })
+        : null;
       try {
         const result = await boundOriginal(agent, input, callOptions);
         try {

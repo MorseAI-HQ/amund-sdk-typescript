@@ -150,17 +150,10 @@ export class MorseCallbackHandler
    */
   private _shadowSetChainSpan(runId: string): void {
     if (typeof runId !== "string" || runId.length === 0) return;
-    const sentinel: SpanHandle = {
-      // The base owns the real SpanData — for the shadow we use a
-      // minimal stand-in. Downstream readers only check map membership,
-      // not field access on this object.
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      span: {} as any,
-      end(): void {
-        /* no-op */
-      },
-    };
-    this._state.chainSpans.set(runId, sentinel);
+    // AID-05: the real handle, so llm/tool callbacks can read the chain's span id as
+    // their parent. Never ended through this map; the base owns the lifecycle.
+    const handle = this._peekSpan(runId);
+    if (handle) this._state.chainSpans.set(runId, handle);
   }
 }
 

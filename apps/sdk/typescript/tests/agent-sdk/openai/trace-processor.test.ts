@@ -7,7 +7,7 @@
  * structural type so we can construct spans directly in TS.
  */
 
-import { beforeEach, describe, expect, it } from "vitest";
+import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 
 import {
   MorseTraceProcessor,
@@ -352,4 +352,13 @@ describe("MorseTraceProcessor — multi-span sequences (realistic)", () => {
     const types = spans.map((s) => s.type).sort();
     expect(types).toEqual(["agent", "agent", "llm", "tool"]);
   });
+});
+
+// AID-09: this suite pins the pre-0.8 naming (chains as `agent` spans). The default
+// shape is covered in tests/agent-identity-*.test.ts.
+beforeAll(() => {
+  process.env.MORSE_AGENT_IDENTITY = "legacy";
+});
+afterAll(() => {
+  delete process.env.MORSE_AGENT_IDENTITY;
 });

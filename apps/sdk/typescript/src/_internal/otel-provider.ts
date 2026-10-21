@@ -40,8 +40,9 @@
  * identifiers, not semantic content, and the server already round-trips
  * OTel's 64-bit span ids by zero-extending them into the 128-bit UUID
  * column (mirrors `adapters/otlp.py::_hex_span_id_to_uuid` server-side).
- * This module lets OTel's own `RandomIdGenerator` mint the (random, valid)
- * span ids for each emitted span; it only forces the *trace* id, via the
+ * Deferred spans use the first 16 hex digits of their Morse span ID, matching
+ * the live context propagated to DB instrumentation. Other OTel spans use
+ * random IDs. The trace ID is forced via the
  * same "synthetic remote parent" technique used for W3C traceparent
  * continuation (see `propagation.ts`): a non-recording `Span` wrapping a
  * `SpanContext` with the desired `traceId` and a pre-computed `sampled`
@@ -78,6 +79,7 @@ import { CompressionAlgorithm } from "@opentelemetry/otlp-exporter-base";
 import {
   BatchSpanProcessor,
   ParentBasedSampler,
+  RandomIdGenerator,
   TraceIdRatioBasedSampler,
   type ReadableSpan,
   type Sampler,
@@ -102,6 +104,7 @@ import { scrubDbSpan } from "./infra-shared";
 import { AsyncHooksContextManager } from "@opentelemetry/context-async-hooks";
 
 import { readEnvServiceName } from "./agent-name";
+import { assignPromptRefsToSpans, safeEntries, warnPromptSpanShared } from "./attribution";
 import { redactString, type RedactionConfig } from "./redaction";
 import { SDK_VERSION } from "./transport";
 
@@ -125,12 +128,20 @@ type ProviderResource = NonNullable<
  * than importing `@opentelemetry/resources`, which is only a transitive
  * dependency of this package (see the dependency-skew note in `configure`).
  */
-export function buildSdkResource(processServiceName?: string): ProviderResource {
+export function buildSdkResource(
+  processServiceName?: string,
+  identity: { gitRevision?: string; serviceVersion?: string } = {},
+): ProviderResource {
   const attributes: Record<string, string> = {
     "telemetry.sdk.language": "nodejs",
     "telemetry.sdk.name": "opentelemetry",
   };
   if (processServiceName) attributes["morse.process.service_name"] = processServiceName;
+  // ATTR-06: `git.revision` and `service.version` are real OTel resource attributes,
+  // so unlike `service.name` they are safe to carry (ingest does not read them as an
+  // agent name).
+  if (identity.gitRevision) attributes["git.revision"] = identity.gitRevision;
+  if (identity.serviceVersion) attributes["service.version"] = identity.serviceVersion;
   const make = (attrs: Record<string, string>): ProviderResource => {
     const res = {
       attributes: attrs,
@@ -482,6 +493,9 @@ export interface OtelEngineConfigureOptions {
   timeoutMillis: number;
   redactionConfig: RedactionConfig | null;
   captureForTests?: boolean;
+  /** ATTR-06: detected deployment identity, stamped on the OTel Resource. */
+  gitRevision?: string;
+  serviceVersion?: string;
   /**
    * Observe the real OTLP exporter's `ExportResult` for every flush, without
    * altering delivery. Used by `dogfood/smoke.ts` to assert the live dev-api
@@ -520,6 +534,14 @@ class ResultCapturingExporter implements SpanExporter {
   }
 }
 
+/** Preserve the IDs already propagated to live DB instrumentation. */
+class MorseIdGenerator extends RandomIdGenerator {
+  nextSpanId: string | undefined;
+
+  private readonly randomIds = new RandomIdGenerator();
+  override generateSpanId = (): string => this.nextSpanId ?? this.randomIds.generateSpanId();
+}
+
 /** Lazily-built TracerProvider + exporter chain. One per process. */
 export class OtelEngine {
   provider: NodeTracerProvider | null = null;
@@ -528,6 +550,7 @@ export class OtelEngine {
   recorder: RecordingSpanExporter | null = null;
   maxFieldBytes: number = DEFAULT_MAX_FIELD_BYTES;
   private exitHookRegistered = false;
+  readonly idGenerator = new MorseIdGenerator();
 
   /**
    * (Re)build the provider. Mirrors Python's `_Client.__init__` semantics:
@@ -556,7 +579,10 @@ export class OtelEngine {
     // one. The process service name is kept as `morse.process.service_name`.
     // Built structurally (not via `@opentelemetry/resources`) so this module
     // takes no new direct dependency — see `buildSdkResource`.
-    const resource = buildSdkResource(readEnvServiceName());
+    const resource = buildSdkResource(readEnvServiceName(), {
+      gitRevision: opts.gitRevision,
+      serviceVersion: opts.serviceVersion,
+    });
 
     const otlpExporter = new OTLPTraceExporter({
       url: opts.endpoint,
@@ -589,7 +615,12 @@ export class OtelEngine {
       spanProcessors.push(new BatchSpanProcessor(this.recorder));
     }
 
-    this.provider = new NodeTracerProvider({ sampler, spanProcessors, resource });
+    this.provider = new NodeTracerProvider({
+      sampler,
+      spanProcessors,
+      resource,
+      idGenerator: this.idGenerator,
+    });
     // The scope version is how the server stamps `traces.sdk_version` on the
     // OTLP path (MHQ-1158); without it every trace read `otlp/http`.
     this.tracer = this.provider.getTracer(INSTRUMENTATION_NAME, SDK_VERSION);
@@ -706,7 +737,12 @@ function spanDictToOtelAttributes(
   spanDict: Record<string, unknown>,
   traceDict: Record<string, unknown>,
   resourceDict: Record<string, unknown>,
-  opts: { isRoot: boolean; maxFieldBytes: number },
+  opts: {
+    isRoot: boolean;
+    maxFieldBytes: number;
+    /** ATTR-04: the single prompt reference assigned to this span, if any. */
+    prompt?: { name: string; version?: number; link_source?: "fetch" };
+  },
 ): Record<string, AttrValue> {
   const attrs: Record<string, AttrValue> = {};
 
@@ -769,6 +805,15 @@ function spanDictToOtelAttributes(
     // in preference to any resource-level service.name.
     const agent = traceDict.agent;
     if (typeof agent === "string" && agent) attrs["morse.agent"] = agent;
+    // AID-01/AID-04: how the name was resolved, and the run() label. Server reads
+    // `morse.app` into trace metadata `morse_app`; `morse.identity_source` -> `identity_source`.
+    const traceMeta = traceDict.metadata as Record<string, unknown> | undefined;
+    if (typeof traceMeta?.identity_source === "string") {
+      attrs["morse.identity_source"] = traceMeta.identity_source;
+    }
+    if (typeof traceMeta?.morse_app === "string" && traceMeta.morse_app) {
+      attrs["morse.app"] = traceMeta.morse_app;
+    }
     const threadId = traceDict.thread_id;
     if (threadId !== undefined && threadId !== null) attrs["morse.thread_id"] = String(threadId);
     const userId = traceDict.user_id;
@@ -791,6 +836,23 @@ function spanDictToOtelAttributes(
     if (typeof framework === "string" && framework) attrs["morse.framework"] = framework;
     const source = resourceDict["morse_ai.source"];
     if (typeof source === "string" && source) attrs["morse.source"] = source;
+    // ATTR-01: one `morse.record_key.<type>` attribute per key. Types were
+    // lower-cased and validated when set, so the attribute name is safe.
+    for (const [type, value] of safeEntries(traceDict.record_keys)) {
+      if (typeof value === "string" && value) attrs[`morse.record_key.${type}`] = value;
+    }
+    // ATTR-04: the declared agent version rides the root span (server: first value wins).
+    const agentVersion = traceDict.agent_version;
+    if (typeof agentVersion === "string" && agentVersion) {
+      attrs["morse.agent_version"] = agentVersion;
+    }
+  }
+  // ATTR-04: a prompt reference sits on the span `setPrompt()` ran in, or the root.
+  if (opts.prompt) {
+    attrs["morse.prompt.name"] = opts.prompt.name;
+    if (opts.prompt.version !== undefined) attrs["morse.prompt.version"] = opts.prompt.version;
+    // UP-09: only "fetch" is sent; absent means declared.
+    if (opts.prompt.link_source === "fetch") attrs["morse.prompt.link_source"] = "fetch";
   }
 
   if (errorMessage && spanDict.status === "failed") {
@@ -876,6 +938,17 @@ export function emitTraceEntry(entry: TraceEntryLike): void {
   const spanCtxById = new Map<string, SpanContext>();
   const maxFieldBytes = eng.maxFieldBytes;
 
+  // ATTR-04: OTLP carries one prompt reference per span, so decide up front which
+  // reference lands where. A ref whose span never finished falls back to the root.
+  const knownSpanIds = new Set<string>();
+  for (const s of spanDicts) if (typeof s.span_id === "string") knownSpanIds.add(s.span_id);
+  const { bySpan: promptBySpan, overflow: promptOverflow } = assignPromptRefsToSpans(
+    traceDict.prompts,
+    knownSpanIds,
+    typeof rootSpanId === "string" ? rootSpanId : undefined,
+  );
+  if (promptOverflow > 0) warnPromptSpanShared();
+
   for (const spanDict of ordered) {
     const spanIdHex = typeof spanDict.span_id === "string" ? spanDict.span_id : undefined;
     const parentIdHex =
@@ -884,25 +957,43 @@ export function emitTraceEntry(entry: TraceEntryLike): void {
     let parentCtx = rootParentCtx;
     if (parentIdHex && spanCtxById.has(parentIdHex)) {
       parentCtx = traceApi.setSpanContext(ROOT_CONTEXT, spanCtxById.get(parentIdHex)!);
+    } else if (parentIdHex && /^[0-9a-f]{16,32}$/i.test(parentIdHex)) {
+      // Children can finish before their parent; its stable wire ID is known.
+      parentCtx = traceApi.setSpanContext(ROOT_CONTEXT, {
+        ...syntheticParentContext,
+        spanId: parentIdHex.slice(0, 16),
+      });
     }
 
     const attributes = spanDictToOtelAttributes(spanDict, traceDict, resourceDict, {
       isRoot: spanDict.span_id === rootSpanId,
       maxFieldBytes,
+      prompt: spanIdHex !== undefined ? promptBySpan.get(spanIdHex) : undefined,
     });
     const startTime = isoToTimeInputMillis(spanDict.started_at);
     const endTime = isoToTimeInputMillis(spanDict.ended_at) ?? startTime;
 
     try {
-      const otelSpan: OtelSpan = tracer.startSpan(
-        typeof spanDict.name === "string" && spanDict.name ? spanDict.name : "span",
-        {
-          kind: SpanKind.INTERNAL,
-          attributes,
-          startTime,
-        },
-        parentCtx,
-      );
+      // startSpan is synchronous; clear the override even if span creation fails.
+      const wireSpanId = spanIdHex?.slice(0, 16);
+      eng.idGenerator.nextSpanId =
+        wireSpanId && /^[0-9a-f]{16}$/i.test(wireSpanId) && !/^0+$/.test(wireSpanId)
+          ? wireSpanId
+          : undefined;
+      let otelSpan: OtelSpan;
+      try {
+        otelSpan = tracer.startSpan(
+          typeof spanDict.name === "string" && spanDict.name ? spanDict.name : "span",
+          {
+            kind: SpanKind.INTERNAL,
+            attributes,
+            startTime,
+          },
+          parentCtx,
+        );
+      } finally {
+        eng.idGenerator.nextSpanId = undefined;
+      }
       if (spanIdHex) {
         spanCtxById.set(spanIdHex, otelSpan.spanContext());
       }

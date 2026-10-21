@@ -31,8 +31,9 @@
 
 import { absorbErrorsSync } from "../_internal/errors";
 import type { SpanHandle } from "../_internal/tracing";
-import { adoptThreadId } from "../_internal/tracing";
-import { emitAgentSpan } from "../_agent-sdk-common/span-emitter";
+import { adoptFrameworkRoot, adoptThreadId, withParentSpan } from "../_internal/tracing";
+import { isLegacyIdentity } from "../_internal/agent-name";
+import { emitAgentSpan, emitChainSpan } from "../_agent-sdk-common/span-emitter";
 import type {
   CallbackHandlerSurface,
   LangChainCoreCallbacksModuleLike,
@@ -88,7 +89,7 @@ export class MorseCallbackHandler implements CallbackHandlerSurface {
     _runType?: string,
     runName?: string,
   ): void {
-    _handleChainStartImpl(this, chain, runId, runName, metadata);
+    _handleChainStartImpl(this, chain, runId, runName, metadata, _parentRunId);
   }
 
   handleChainEnd(_outputs: Record<string, unknown>, runId: string, parentRunId?: string): void {
@@ -106,6 +107,21 @@ export class MorseCallbackHandler implements CallbackHandlerSurface {
   /** @internal */
   _setSpan(runId: string, handle: SpanHandle): void {
     this.chainSpans.set(runId, handle);
+  }
+
+  /** @internal — span id of an open chain, for parent attribution (AID-05). */
+  _spanIdOf(runId: string | undefined): string | undefined {
+    return runId === undefined ? undefined : this.chainSpans.get(runId)?.span.span_id;
+  }
+
+  /** @internal — the open handle, without removing it. */
+  _peekSpan(runId: string): SpanHandle | undefined {
+    return this.chainSpans.get(runId);
+  }
+
+  /** @internal */
+  _defaultAgentName(): string | undefined {
+    return this.defaultAgentName;
   }
 
   /** @internal */
@@ -134,6 +150,7 @@ const _handleChainStartImpl: (
   runId: string,
   runName: string | undefined,
   metadata?: Record<string, unknown>,
+  parentRunId?: string,
 ) => void = absorbErrorsSync(
   (
     self: MorseCallbackHandler,
@@ -141,6 +158,7 @@ const _handleChainStartImpl: (
     runId: string,
     runName: string | undefined,
     metadata?: Record<string, unknown>,
+    parentRunId?: string,
   ) => {
     if (typeof runId !== "string" || runId.length === 0) return;
     // Defensive: if LangGraph re-fires start for the same runId, leak nothing.
@@ -148,7 +166,17 @@ const _handleChainStartImpl: (
       // (we just popped it — drop on the floor; the dangling end will be a no-op)
     }
     const agentName = self._resolveAgentName(chain, runName);
-    const handle = emitAgentSpan({ adapter: ADAPTER, agentName });
+    let handle: SpanHandle | null;
+    if (isLegacyIdentity()) {
+      handle = emitAgentSpan({ adapter: ADAPTER, agentName });
+    } else {
+      // AID-01/02/05: the outermost chain names the trace's root agent; every chain, that
+      // one included, is a chain span parented by its callback parent, not an agent.
+      if (parentRunId === undefined) adoptFrameworkRoot(self._defaultAgentName() ?? agentName);
+      handle = withParentSpan(self._spanIdOf(parentRunId), () =>
+        emitChainSpan({ adapter: ADAPTER, name: agentName }),
+      );
+    }
     if (handle) self._setSpan(runId, handle);
     // MHQ-1029: LangGraph copies `configurable.thread_id` onto the run
     // metadata, which is the only place a checkpointed conversation's
@@ -162,6 +190,7 @@ const _handleChainStartImpl: (
   runId: string,
   runName: string | undefined,
   metadata?: Record<string, unknown>,
+  parentRunId?: string,
 ) => void;
 
 const _handleChainEndImpl: (self: MorseCallbackHandler, runId: string) => void = absorbErrorsSync(

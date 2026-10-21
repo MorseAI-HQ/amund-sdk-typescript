@@ -9,10 +9,73 @@ The TypeScript and Python SDKs version **independently** — they share `0.4.0` 
 their first public release because they reached feature parity there, not
 because they are released in lockstep. Expect the numbers to diverge.
 
-## [Unreleased]
+## [Unreleased — next minor] Agent identity v2 (MHQ-1408)
+
+Behaviour change, default on. `MORSE_AGENT_IDENTITY=legacy` restores the old naming and span shapes.
+
+### Changed
+
+- **Identity ladder.** Agent name resolves `run()` name > framework-native root (graph / starting
+  agent) > `service.name` > entry script. The trace carries `identity_source`
+  (`run|framework|service_name|entry_script|default`). Launcher scripts such as Next.js
+  `start-server` no longer name an agent.
+- **Framework nodes are spans, not agents.** LangGraph/LangChain chains, openai-agents `task`/`turn`
+  envelopes (formerly tools `task.Agent workflow` / `turn.anon`) and the starting agent's duplicate
+  spans are recorded as `custom` spans with `metadata.span_kind="chain"`. Handoff targets are no
+  longer recorded twice.
+- **Parents follow callback parentage**, so parallel branches keep their own LLM/tool spans.
+- **`run("name")` is a label** when an adapter discovers a root: the trace's agent is the discovered
+  root and the name is sent as `morse.app` (trace metadata `morse_app`).
+
+### Fixed
+
+- `run({ name })` is accepted as an alias of `run({ agentName })` instead of being silently ignored (MHQ-1415).
+
+## [0.7.0] — Unreleased
 
 ### Added
 
+- **`wrapOpenAI` traces `responses.create`.** The OpenAI Responses API now emits an
+  `openai.responses.create` `llm` span alongside the existing `chat.completions.create` span, with
+  model, input/output/cached/reasoning tokens, cost, and prompt/response capture (`instructions`
+  as a system message, `input` as a string or message items, `function_call` output as
+  `[tool_call:name] args`). A client without `responses` is unaffected. Streaming
+  (`stream: true`) is still not traced on either API (MHQ-1407). Parity with the Python SDK.
+- **`getPrompt(name, { label?, version?, ifNoneMatch?, cacheTtlSeconds? })`** fetches a hosted prompt
+  from the registry (`GET /api/v1/prompts/{name}`, needs a key with the `prompts:read` scope).
+  Resolves to a `Prompt` (`name, version, templateText, labels, etag`); a 304 gives
+  `{ notModified: true, etag }`. Typed errors `PromptAccessError`, `PromptNotFoundError`,
+  `PromptRateLimitError` (`.retryAfter`), all subclassing `PromptError`. Deliberately thin: no
+  retries, no fallback.
+- **`getPrompt` links the active run (UP-09).** New `link` option, default `true`: when a run is
+  active at call time, the run gets a prompt reference for the fetched `name@version` tagged
+  `link_source: "fetch"` (JSON `link_source`, OTLP `morse.prompt.link_source`). Applies to a 200, an SDK
+  cache hit, and a 304 when the SDK holds the cached prompt (matching etag). No active run: no-op.
+  Pass `{ link: false }` to opt out. Linking never throws, and the first link per process logs one
+  info line. A `setPrompt` ref for the same name, version and span is deduped into one ref tagged
+  "fetch". `setPrompt` refs are unchanged (no `link_source` on the wire).
+- **Optional prompt cache.** `getPrompt(name, { cacheTtlSeconds })` serves a process-local LRU
+  (default 256 entries); stale entries revalidate with `If-None-Match` and errors are never masked
+  by stale data. Off by default (unset/`0`): no cache read or write. Passing your own `ifNoneMatch`
+  bypasses it. New `configurePromptCache({ maxEntries })` and `clearPromptCache()`. We recommend
+  caching in some form: call the API directly, use your own cache, or use `cacheTtlSeconds`.
+
+- **Record keys, agent version, prompt references and git revision (MHQ-1275).**
+  Additive; nothing changes for code that doesn't call them. `linkRecord(keyType, keyValue)`
+  and `run({ recordKeys })` link a trace to a business record by id; `init({ agentVersion })`
+  and `run({ agentVersion })` declare the agent version; `setPrompt(name, version?)` records
+  the prompt used, pinned to the current span when called inside one. Inputs are validated
+  client-side and dropped, never thrown (key types lower-cased and matched against
+  `^[a-z0-9][a-z0-9_.-]{0,63}$`, values 1-256 characters, 20 keys and 20 prompt references
+  per trace, agent version cut to 128). JSON wire: trace fields `record_keys`,
+  `agent_version`, `prompts`. OTLP wire: root-span `morse.record_key.<type>` and
+  `morse.agent_version`; `morse.prompt.name` / `morse.prompt.version` on the span the call was
+  made in (one reference per span on OTLP: the last wins). The SDK also now sends
+  `git.revision` (from `MORSE_GIT_REVISION`, `GITHUB_SHA`, `CI_COMMIT_SHA`,
+  `RAILWAY_GIT_COMMIT_SHA`, `VERCEL_GIT_COMMIT_SHA`, `RENDER_GIT_COMMIT`, `SOURCE_VERSION`, then
+  `git rev-parse HEAD` on Node only, 500 ms cap, never in browser/edge bundles) and
+  `service.version` (from `OTEL_RESOURCE_ATTRIBUTES`) as resource attributes on both wires.
+  Detected once at `init()`. In Docker, set `MORSE_GIT_REVISION` at build time.
 - **Retriever `documents[]` (@beta).** LangChain retriever spans now report each
   returned chunk as `{ rank, id, content, score, source }` (content truncated to
   2KB with `truncated: true`, max 10 chunks) so Morse can sample and judge
@@ -30,11 +93,21 @@ because they are released in lockstep. Expect the numbers to diverge.
   entry-script name, then `default-agent`). The SDK resource no longer carries
   `service.name`; a process `OTEL_SERVICE_NAME` is kept as
   `morse.process.service_name` (MHQ-1100).
-
-## [0.7.0] — Unreleased
+- **OpenAI `responses.create` is now traced by `wrapOpenAI`, with thread facts.** The `llm` span
+  (`openai.responses.create`) carries `response_id`, `previous_response_id` and `conversation_id`
+  (a string, or the `id` of a conversation object) in span metadata, only for the keys present.
+  Streamed calls get `previous_response_id` and `conversation_id` only, since no final response
+  object is available to the adapter. No new public function.
+- **`init({ captureEndUser })`: opt-in end-user capture (default `false`).** When `true`, the OpenAI
+  adapter reads `user` / `safety_identifier` and the Anthropic adapter reads `metadata.user_id`, and
+  sets the trace `user_id` to `"h:" + sha256(value).slice(0, 32)`. The raw value is never sent, a
+  `userId` the app already set wins, and `customer_id` is never set. Needs `node:crypto`, so it is
+  a no-op in browser bundles. Off by default: behaviour is unchanged.
 
 ### Changed — behaviour change, no API change
 
+- **Peer ranges are unchanged since 0.5.0.** `ai`, `openai`, `@langchain/core` etc. peer ranges are
+  unchanged since 0.5.0; `ai<7` needs `--legacy-peer-deps` or SDK 0.4.x.
 - **Database capture is now ON by default** (`pg`, `mysql2`, `better-sqlite3`), and records only
   inside an open trace. Before 0.7.0 it needed `MORSE_CAPTURE_DB=1`.
   **To opt out and keep the old behaviour, set `MORSE_CAPTURE_INFRA=0`** (or `MORSE_CAPTURE_DB=0`;
@@ -47,6 +120,10 @@ because they are released in lockstep. Expect the numbers to diverge.
 - **A failed db / http / queue span records the error class, not the message.**
 - **Per-trace caps:** at most 200 `db`, 100 `http` and 100 queue publish spans per trace; the rest
   fold into one summary span per kind (`infra.suppressed_count`).
+- **Infra spans never fail a trace, and queue spans are not billable** (MHQ-1404). A failed
+  `db`, `http` or `queue` span stays failed on its own row, but the server no longer marks the
+  whole trace failed because of it. Queue publish spans now carry the new `queue` span type
+  (was `custom`) and join `db`/`http` as non-billable (ADR-033 D1).
 
 ### Added
 
@@ -56,7 +133,7 @@ because they are released in lockstep. Expect the numbers to diverge.
   excluded. On by default; `MORSE_CAPTURE_HTTP=0` disables. Uses `diagnostics_channel`, so it
   works in ESM and CJS and adds no dependency.
 - **Queue spans.** BullMQ `Queue.add` / `addBulk` and SQS (`@aws-sdk/client-sqs`) `SendMessage*`
-  inside a trace record a `custom` span `publish <destination>` with OpenTelemetry messaging
+  inside a trace record a `queue` span `publish <destination>` with OpenTelemetry messaging
   attributes and inject a W3C `traceparent` (BullMQ `telemetry.metadata`, SQS message attribute).
   On by default; `MORSE_CAPTURE_QUEUE=0` disables. Like the DB instrumentations, these patch at
   `require()` time.

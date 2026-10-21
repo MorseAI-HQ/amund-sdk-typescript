@@ -50,6 +50,7 @@ import {
 } from "./_internal/env";
 import { maybeEnableInfraCaptureFromEnv } from "./_internal/infra-capture";
 import { getEngine as getOtelEngine } from "./_internal/otel-provider";
+import { _clearDetectedIdentityForTesting, detectDeploymentIdentity } from "./_internal/revision";
 import {
   buildRedactionConfig,
   type RedactionConfig,
@@ -70,8 +71,13 @@ import {
   runAsync as _runAsync,
   runSync as _runSync,
   sendTrace as _sendTrace,
+  linkRecord as _linkRecord,
+  setAgentVersionDefault,
+  setCaptureEndUser,
   setContext as _setContext,
   setOutcome as _setOutcome,
+  setPrompt as _setPrompt,
+  linkFetchedPrompt as _linkFetchedPrompt,
   setRedactionConfig,
   setSource as _setSource,
   setTransport,
@@ -91,6 +97,13 @@ import {
   _resetForTesting as _resetDiagnosticsForTesting,
 } from "./_internal/diagnostics";
 import { _setEnsureInitialized as _setLogEnsureInitialized } from "./log";
+import {
+  PromptError,
+  fetchPromptCached,
+  peekCachedPrompt,
+  type GetPromptOptions,
+  type GetPromptResult,
+} from "./prompts";
 import {
   buildTraceEntry,
   generateSpanId,
@@ -133,6 +146,15 @@ export type {
   AnthropicUsage,
   InstrumentAnthropicOptions,
 } from "./anthropic";
+export {
+  PromptError,
+  PromptAccessError,
+  PromptNotFoundError,
+  PromptRateLimitError,
+  configurePromptCache,
+  clearPromptCache,
+} from "./prompts";
+export type { GetPromptOptions, GetPromptResult, Prompt, PromptNotModified } from "./prompts";
 export { log } from "./log";
 export type { LogOptions, LogSeverity } from "./log";
 
@@ -167,6 +189,22 @@ export interface InitOptions {
    * Customers should not set this.
    */
   source?: string;
+  /**
+   * Default version of this agent for every run (ATTR-04), e.g. a release tag or
+   * build number. A per-run `run({ agentVersion })` overrides it. Truncated to
+   * 128 characters. Mirrors Python's `init(agent_version=...)`.
+   */
+  agentVersion?: string;
+  /**
+   * Opt-in, default `false`. When `true`, the OpenAI adapter reads each call's
+   * `user` / `safety_identifier` and the Anthropic adapter reads
+   * `metadata.user_id`, and sets the trace `user_id` to
+   * `"h:" + sha256(value).slice(0, 32)`. The raw value is never sent, a
+   * `userId` your app already set (`run({ userId })`) always wins, and
+   * `customer_id` is never set. Hashing needs `node:crypto`, so this is a
+   * no-op in browser bundles. Mirrors Python's `init(capture_end_user=...)`.
+   */
+  captureEndUser?: boolean;
 }
 
 /** Single agent-run payload accepted by `track()`. */
@@ -285,6 +323,12 @@ function buildSingleton(opts: InitOptions, redaction: RedactionConfig): Singleto
   const explicitSource = isValidInternalSource(opts.source) ? opts.source! : undefined;
   const resolvedSource = explicitSource ?? readInternalSourceFromEnv() ?? null;
   _setSource(resolvedSource);
+  setAgentVersionDefault(opts.agentVersion);
+  setCaptureEndUser(opts.captureEndUser);
+  // ATTR-06: git revision (env vars, then `git rev-parse HEAD` on Node) and
+  // `service.version` (from OTEL_RESOURCE_ATTRIBUTES), detected once here and
+  // cached. Never throws.
+  const identity = detectDeploymentIdentity();
   logDestinationOnce(endpoint);
 
   // MHQ-482: run()/span()/runTraced()'s real emission pipeline — real OTel
@@ -307,6 +351,8 @@ function buildSingleton(opts: InitOptions, redaction: RedactionConfig): Singleto
       // of the library's full 30s ceiling. Mirrors the Python SDK.
       timeoutMillis: 10_000,
       redactionConfig: redaction,
+      gitRevision: identity.gitRevision,
+      serviceVersion: identity.serviceVersion,
     });
   } catch (err) {
     report(err, { fingerprint: "morse.otel_provider.configure" });
@@ -545,7 +591,114 @@ export function setOutcome(success: boolean, outcome?: string): void {
   _setOutcome(success, outcome);
 }
 
+/**
+ * Link the active trace to a business record by id (ATTR-01), so an outcome
+ * reported later against that id can be matched back to this run:
+ *
+ *     morse.linkRecord("zendesk_ticket", ticket.id);
+ *
+ * Calls accumulate. `keyType` is lower-cased and must match
+ * `^[a-z0-9][a-z0-9_.-]{0,63}$`; `keyValue` is a string or number of 1-256
+ * characters. Invalid input is dropped, never thrown; at most 20 keys per
+ * trace. Use opaque ids, not personal data. No-op outside an active trace.
+ * Mirrors Python's `morse_ai.link_record()`.
+ */
+export function linkRecord(keyType: string, keyValue: string | number): void {
+  _linkRecord(keyType, keyValue);
+}
+
+/**
+ * Record which prompt the active trace used (ATTR-04). Inside a `span()` the
+ * reference is attached to that span, otherwise to the trace. `version` is
+ * optional and must be an integer >= 1 (anything else is dropped, keeping the
+ * name). At most 20 references per trace. No-op outside an active trace.
+ * Mirrors Python's `morse_ai.set_prompt()`.
+ */
+export function setPrompt(name: string, version?: number): void {
+  _setPrompt(name, version);
+}
+
 /** Start a child span under the active trace. Returns null if no trace. */
+/**
+ * Fetch a hosted prompt from the Morse prompt registry.
+ *
+ * Selects by `label` (default `"production"`) or `version`; both throws a
+ * `TypeError` before any request. Pass a previous result's `etag` as
+ * `ifNoneMatch` to get `{ notModified: true, etag }` on a 304.
+ *
+ * A plain GET: no retries, no fallback. Unlike the rest of
+ * the SDK it rejects, so you decide what to do: `PromptAccessError` (403, key
+ * lacks `prompts:read`), `PromptNotFoundError` (404), `PromptRateLimitError`
+ * (429, `.retryAfter`), and fetch's own error on network failure.
+ *
+ * Caching: we recommend caching in some form so Morse is not on your request
+ * hot path. Three options: (1) call the API directly every time (the default;
+ * the API sends `Cache-Control: private, max-age=30`); (2) use your own cache;
+ * (3) pass `cacheTtlSeconds` for a small process-local LRU. A fresh entry is
+ * returned without a request; a stale one is revalidated with `If-None-Match`
+ * (a 304 refreshes it and returns the cached prompt, `notModified: false`).
+ * Errors always propagate, never masked by stale data. Unset or 0 uses no
+ * cache; passing your own `ifNoneMatch` bypasses it. See `configurePromptCache`
+ * and `clearPromptCache`.
+ *
+ * Linking (UP-09): by default, if a run is active when you call this, the run is
+ * linked to the returned `name@version` (a prompt reference tagged
+ * `link_source: "fetch"`), so Morse can show which runs used which managed
+ * version. This covers a fresh 200, an SDK cache hit, and a 304 when the SDK holds
+ * the cached prompt for that selector (otherwise nothing is linked). No active run
+ * means no link; pass `{ link: false }` to opt out. Linking never throws. If you
+ * also call `setPrompt` for the same name, version and span, one reference is kept
+ * and it is tagged "fetch".
+ */
+export async function getPrompt(
+  name: string,
+  options: GetPromptOptions = {},
+): Promise<GetPromptResult> {
+  if (options.label !== undefined && options.version !== undefined) {
+    throw new TypeError("Pass either label or version, not both");
+  }
+  const state = ensureInitialized();
+  if (state === null) {
+    throw new PromptError(
+      "morse: not initialized — set MORSE_API_KEY or call morse.init({ apiKey }) before getPrompt()",
+    );
+  }
+  const result = await fetchPromptCached(state.endpoint, state.apiKey, name, options);
+  if (options.link !== false) {
+    linkResolvedPrompt(state.endpoint, state.apiKey, name, options, result);
+  }
+  return result;
+}
+
+let promptLinkLogged = false;
+
+/** UP-09: link the run active at call time. Never throws. */
+function linkResolvedPrompt(
+  endpoint: string,
+  apiKey: string,
+  name: string,
+  options: GetPromptOptions,
+  result: GetPromptResult,
+): void {
+  try {
+    const prompt = result.notModified
+      ? peekCachedPrompt(endpoint, apiKey, name, options, result.etag)
+      : result;
+    if (prompt === undefined) return;
+    if (!_linkFetchedPrompt(prompt.name, prompt.version)) return;
+    if (!promptLinkLogged) {
+      promptLinkLogged = true;
+      logger(
+        "info",
+        "morse: getPrompt() linked the active run to the prompt it fetched. " +
+          "Pass { link: false } to opt out. (This message prints once per process.)",
+      );
+    }
+  } catch {
+    // linking must never break a prompt fetch
+  }
+}
+
 export function startSpan(options: SpanOptions): SpanHandle | null {
   return _startSpan(options);
 }
@@ -644,7 +797,9 @@ export function _resetForTesting(): void {
   getOtelEngine().resetForTesting();
   noApiKeyWarningEmitted = false;
   lastLoggedEndpoint = null;
+  promptLinkLogged = false;
   _setSource(null);
+  _clearDetectedIdentityForTesting();
   _resetTracingForTesting();
   _resetDiagnosticsForTesting();
   _resetAutoDetectForTesting();

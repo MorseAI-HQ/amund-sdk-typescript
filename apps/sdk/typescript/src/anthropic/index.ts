@@ -37,6 +37,7 @@ import type { ContextSegment, SpanData } from "../_internal/spans";
 import { generateSpanId, nowIso } from "../_internal/spans";
 import { setActiveFramework } from "../_internal/active-framework";
 import { captureInputMessages, extractAnthropicOutputText } from "../_internal/llm-io";
+import { applyEndUser } from "../_internal/end-user";
 import { getActiveTraceState, runAsync as _runAsync, startSpan } from "../_internal/tracing";
 
 /* ------------------------------------------------------------------------ */
@@ -430,6 +431,7 @@ function buildPatchedCreate(
       try {
         if (handle) {
           const segments = safeExtractSegments(params, response);
+          applyEndUser((params?.metadata as { user_id?: unknown } | undefined)?.user_id);
           const usage = response?.usage ?? {};
           const inputTokens =
             (usage.input_tokens ?? 0) +

@@ -84,7 +84,7 @@ describe("BullMQ producer", () => {
       await q.add("work", { note: "payload-canary" });
     });
     expect(spans.map((s) => s.name)).toEqual(["publish agent-jobs"]);
-    expect(spans[0]!.type).toBe("custom");
+    expect(spans[0]!.type).toBe("queue");
     expect(spans[0]!.metadata).toMatchObject({
       "messaging.system": "bullmq",
       "messaging.operation.type": "publish",

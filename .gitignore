@@ -110,3 +110,9 @@ apps/web/tests/e2e/.auth/
 
 # MHQ-1138 load-harness output (scripts/load/run.sh) and seeded throwaway credentials
 load-results/
+
+# Local Redis snapshots
+dump.rdb
+
+# Design-review capture output (scripts/design-review/capture.mjs)
+.design-review/

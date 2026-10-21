@@ -11,7 +11,7 @@
  * here catches it before customers hit it.
  */
 
-import { beforeEach, describe, expect, it } from "vitest";
+import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 
 import { wrapRunnerWithFullInstrumentation } from "../../../src/openai-agents";
 import { _resetForTesting, getLastTrace, runAsync } from "../../../src/_internal/tracing";
@@ -298,4 +298,13 @@ describe("wrapRunnerWithFullInstrumentation — dispose", () => {
       dispose();
     }).not.toThrow();
   });
+});
+
+// AID-09: this suite pins the pre-0.8 naming (chains as `agent` spans). The default
+// shape is covered in tests/agent-identity-*.test.ts.
+beforeAll(() => {
+  process.env.MORSE_AGENT_IDENTITY = "legacy";
+});
+afterAll(() => {
+  delete process.env.MORSE_AGENT_IDENTITY;
 });

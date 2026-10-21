@@ -7,10 +7,10 @@
  *
  * ```ts
  * import { MorseCallbackHandler } from "@morsehq-dev/sdk/langchain";
- * import { runAsync } from "@morsehq-dev/sdk";
+ * import * as morse from "@morsehq-dev/sdk";
  *
  * const handler = new MorseCallbackHandler({ agentName: "my-agent" });
- * await runAsync({ agentName: "my-agent" }, async () => {
+ * await morse.run({ agentName: "my-agent" }, async () => {
  *   await chain.invoke(input, { callbacks: [handler] });
  * });
  * ```

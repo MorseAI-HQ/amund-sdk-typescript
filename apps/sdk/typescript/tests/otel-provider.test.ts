@@ -23,6 +23,7 @@ import {
   getEngine,
   jsonCapped,
   ratioSample,
+  withOtelSpanContext,
   TRUNCATION_MARKER,
   type OtelEngine,
   type TraceEntryLike,
@@ -188,6 +189,51 @@ describe("sampler", () => {
 /* -------------------------------------------------------------------------- */
 
 describe("trace/span id handling", () => {
+  it("live DB spans keep their deferred agent parent", async () => {
+    const engine = configureEngine();
+    const traceId = freshTraceId();
+    const entry = freshEntry(traceId);
+    const rootId = entry.spans![0]!.span_id as string;
+    withOtelSpanContext(traceId, rootId.slice(0, 16), () => {
+      const db = engine.provider!.getTracer("db-instrumentation").startSpan("SELECT");
+      db.end();
+    });
+    emitTraceEntry(entry);
+    await engine.flush();
+    const spans = spansFor(engine, traceId);
+    const root = spans.find((s) => s.name === "test-agent")!;
+    const db = spans.find((s) => s.name === "SELECT")!;
+    expect(db.parentSpanContext?.spanId).toBe(root.spanContext().spanId);
+  });
+
+  it("keeps parentage when deferred children finish before their parent", async () => {
+    const engine = configureEngine();
+    const traceId = freshTraceId();
+    const entry = freshEntry(traceId);
+    const rootId = entry.spans![0]!.span_id as string;
+    const parentId = freshTraceId();
+    entry.spans!.push({
+      span_id: freshTraceId(),
+      parent_span_id: parentId,
+      name: "child",
+      type: "tool",
+      status: "completed",
+    });
+    entry.spans!.push({
+      span_id: parentId,
+      parent_span_id: rootId,
+      name: "parent",
+      type: "tool",
+      status: "completed",
+    });
+    emitTraceEntry(entry);
+    await engine.flush();
+    const spans = spansFor(engine, traceId);
+    const parent = spans.find((s) => s.name === "parent")!;
+    const child = spans.find((s) => s.name === "child")!;
+    expect(child.parentSpanContext?.spanId).toBe(parent.spanContext().spanId);
+  });
+
   it("every emitted span carries the forced trace id", async () => {
     const engine = configureEngine();
     const traceId = freshTraceId();
@@ -213,7 +259,7 @@ describe("trace/span id handling", () => {
     }
   });
 
-  it("OTel mints its own (non-Morse) 16-hex span ids, not a truncated Morse span_id", async () => {
+  it("deferred spans retain the 16-hex ID propagated to live instrumentation", async () => {
     const engine = configureEngine();
     const traceId = freshTraceId();
     const entry = freshEntry(traceId);
@@ -225,7 +271,7 @@ describe("trace/span id handling", () => {
     expect(matching.length).toBe(1);
     const otelSpanId = matching[0]!.spanContext().spanId;
     expect(otelSpanId).toMatch(/^[0-9a-f]{16}$/);
-    expect(otelSpanId).not.toBe(morseSpanId.slice(0, 16));
+    expect(otelSpanId).toBe(morseSpanId.slice(0, 16));
   });
 
   it("an entry built without going through run()/span() (adapter-style) still converts", async () => {

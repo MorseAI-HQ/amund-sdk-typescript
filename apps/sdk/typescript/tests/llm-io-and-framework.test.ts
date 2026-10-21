@@ -188,13 +188,16 @@ describe("openai adapter — input_data/output_data + framework", () => {
 });
 
 describe("trace resource", () => {
-  it("omits the resource entirely when no framework and no source are set", async () => {
+  it("sends no framework or source label when none are set", async () => {
     morse.init({ apiKey: "av_x" }); // pragma: allowlist secret
     await morse.runTraced({ agentName: "plain" }, async () => null);
     const entry = morse._getLastTraceForTesting() as unknown as {
       resource?: Record<string, unknown>;
     };
-    // Absence is the signal — never invent a default framework.
-    expect(entry.resource).toBeUndefined();
+    // Absence is the signal — never invent a default framework. (The resource may still
+    // carry `git.revision` / `service.version` from the environment, ATTR-06; the
+    // fully-empty case is pinned in attribution-capture.test.ts with detection stubbed.)
+    expect(entry.resource?.["morse_ai.framework"]).toBeUndefined();
+    expect(entry.resource?.["morse_ai.source"]).toBeUndefined();
   });
 });

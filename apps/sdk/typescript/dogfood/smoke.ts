@@ -493,6 +493,51 @@ async function main(): Promise<void> {
   }
   await assertAnthropicLlmSpanAccepted(captured.splice(anthropicCaptureStart), endpoint, apiKey);
 
+  // 2g. Attribution fields (MHQ-1275, ATTR-01/04): record keys, agent version and
+  //     prompt references. Rides OTLP, so the engine's `ExportResult`s below prove
+  //     the endpoint accepts the new `morse.record_key.*` / `morse.agent_version` /
+  //     `morse.prompt.*` attributes. What THIS block adds is the half OTLP cannot
+  //     show: the endpoint returns 200 whether or not the SDK sent the fields, so the
+  //     built trace dict is read back and every field must be on it. Storage fidelity
+  //     is asserted server-side (apps/api/tests/traces/test_attribution_*.py).
+  await morse.runTraced(
+    {
+      agentName: "smoke-attribution",
+      recordKeys: { smoke_run: "attr-1" },
+      agentVersion: "smoke-1",
+    },
+    async () => {
+      morse.linkRecord("smoke_ticket", 4812);
+      await morse.spanAsync({ name: "smoke-prompted", type: "llm" }, async () => {
+        morse.setPrompt("smoke-prompt", 3);
+        return null;
+      });
+      return null;
+    },
+  );
+  const attribution = morse._getLastTraceForTesting() as unknown as {
+    trace: {
+      record_keys?: Record<string, string>;
+      agent_version?: string;
+      prompts?: Array<{ name: string; version?: number; span_id?: string }>;
+    };
+  } | null;
+  const attributionProblems: string[] = [];
+  if (attribution?.trace.record_keys?.smoke_run !== "attr-1")
+    attributionProblems.push("record_keys.smoke_run");
+  if (attribution?.trace.record_keys?.smoke_ticket !== "4812")
+    attributionProblems.push("record_keys.smoke_ticket (linkRecord)");
+  if (attribution?.trace.agent_version !== "smoke-1") attributionProblems.push("agent_version");
+  const smokePrompt = attribution?.trace.prompts?.find((p) => p.name === "smoke-prompt");
+  if (smokePrompt?.version !== 3 || !smokePrompt.span_id)
+    attributionProblems.push("prompts[smoke-prompt] version/span_id");
+  if (attributionProblems.length > 0) {
+    console.error(
+      `[smoke] FAIL — attribution fields missing from the built trace: ${attributionProblems.join(", ")}`,
+    );
+    process.exit(1);
+  }
+
   // 2b. Payload-shape matrix (MHQ-812). A span payload is an arbitrary JSON
   //     value, not necessarily an object — `set_output(data: Any)` accepts
   //     anything and storage is a JSONField. MHQ-805 shipped because nothing

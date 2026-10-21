@@ -33,7 +33,7 @@
 
 import { absorbErrorsSync } from "../_internal/errors";
 import { calculateCost } from "../_internal/pricing";
-import type { SpanHandle } from "../_internal/tracing";
+import { withParentSpan, type SpanHandle } from "../_internal/tracing";
 import { emitLlmSpan, emitToolSpan } from "../_agent-sdk-common/span-emitter";
 import { setActiveFramework } from "../_internal/active-framework";
 import {
@@ -242,6 +242,19 @@ function popAndEnd(
  * Every method body is wrapped in `absorbErrorsSync` — telemetry never
  * throws into the LangGraph runtime.
  */
+/** AID-05: span id of whichever open chain/llm/tool span is the callback parent. */
+function parentSpanIdOf(
+  state: LangGraphRunState,
+  parentRunId: string | undefined,
+): string | undefined {
+  if (parentRunId === undefined) return undefined;
+  return (
+    state.chainSpans.get(parentRunId) ??
+    state.toolSpans.get(parentRunId) ??
+    state.llmSpans.get(parentRunId)
+  )?.span?.span_id;
+}
+
 export function createLlmAndToolHandlers(
   state: LangGraphRunState,
   options: LlmAndToolHandlerOptions = {},
@@ -257,16 +270,18 @@ export function createLlmAndToolHandlers(
     llm: SerializedLike,
     prompts: string[],
     runId: string,
-    _parentRunId?: string,
+    parentRunId?: string,
     extraParams?: Record<string, unknown>,
   ): void => {
     setActiveFramework(FRAMEWORK);
-    const handle = emitLlmSpan({
-      adapter: ADAPTER,
-      model: llmModelOf(llm, extraParams),
-      provider: extractProvider(llm?.id),
-      inputData: capturePrompts(prompts),
-    });
+    const handle = withParentSpan(parentSpanIdOf(state, parentRunId), () =>
+      emitLlmSpan({
+        adapter: ADAPTER,
+        model: llmModelOf(llm, extraParams),
+        provider: extractProvider(llm?.id),
+        inputData: capturePrompts(prompts),
+      }),
+    );
     if (handle !== null) {
       state.llmSpans.set(runId, handle);
     }
@@ -276,7 +291,7 @@ export function createLlmAndToolHandlers(
     llm: SerializedLike,
     messages: BaseMessageLike[][],
     runId: string,
-    _parentRunId?: string,
+    parentRunId?: string,
     extraParams?: Record<string, unknown>,
   ): void => {
     // Chat models ARE LLMs — emit a `type=llm` span, same as handleLLMStart.
@@ -286,13 +301,15 @@ export function createLlmAndToolHandlers(
     const flatMessages = flattenMessages(messages);
     const contextSegments = decomposeOpenAiMessages(flatMessages, toolsFromExtra(extraParams));
     setActiveFramework(FRAMEWORK);
-    const handle = emitLlmSpan({
-      adapter: ADAPTER,
-      model: llmModelOf(llm, extraParams),
-      provider: extractProvider(llm?.id),
-      contextSegments: contextSegments.length > 0 ? contextSegments : undefined,
-      inputData: captureLangChainMessages(flatMessages),
-    });
+    const handle = withParentSpan(parentSpanIdOf(state, parentRunId), () =>
+      emitLlmSpan({
+        adapter: ADAPTER,
+        model: llmModelOf(llm, extraParams),
+        provider: extractProvider(llm?.id),
+        contextSegments: contextSegments.length > 0 ? contextSegments : undefined,
+        inputData: captureLangChainMessages(flatMessages),
+      }),
+    );
     if (handle !== null) {
       state.llmSpans.set(runId, handle);
     }
@@ -312,12 +329,19 @@ export function createLlmAndToolHandlers(
     popAndEnd(state.llmSpans, runId, err);
   };
 
-  const _handleToolStart = (tool: SerializedLike, input: string, runId: string): void => {
-    const handle = emitToolSpan({
-      adapter: ADAPTER,
-      toolName: toolNameOf(tool),
-      inputSummary: summarizeToolInput(input, toolInputOpts),
-    });
+  const _handleToolStart = (
+    tool: SerializedLike,
+    input: string,
+    runId: string,
+    parentRunId?: string,
+  ): void => {
+    const handle = withParentSpan(parentSpanIdOf(state, parentRunId), () =>
+      emitToolSpan({
+        adapter: ADAPTER,
+        toolName: toolNameOf(tool),
+        inputSummary: summarizeToolInput(input, toolInputOpts),
+      }),
+    );
     if (handle !== null) {
       state.toolSpans.set(runId, handle);
     }

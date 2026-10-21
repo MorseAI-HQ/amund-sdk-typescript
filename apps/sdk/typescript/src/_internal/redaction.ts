@@ -108,6 +108,7 @@ const PATTERNS: Record<string, RegExp> = {
     "\\b(?:" +
       "sk-[A-Za-z0-9_-]{20,}" +
       "|sk_(?:live|test)_[A-Za-z0-9]{20,}" +
+      "|(?:mhq|av)_(?:pk_)?[\\s\\S]{0,48}_[A-Fa-f0-9]{64}" +
       "|mhq_[A-Za-z0-9]{20,}" +
       "|av_[A-Za-z0-9]{20,}" +
       "|ghp_[A-Za-z0-9]{36}" +

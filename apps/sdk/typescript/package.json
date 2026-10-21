@@ -98,6 +98,7 @@
     "lint": "eslint \"src/**/*.{ts,tsx}\" --max-warnings=0",
     "test": "vitest run",
     "contract": "tsx tests/contract/check.ts",
+    "pack:published": "node scripts/pack-published.mjs",
     "bench:infra": "tsx benchmarks/infra-capture-overhead.ts",
     "dogfood:anthropic": "tsx dogfood/anthropic-agent-sdk.ts",
     "dogfood:openai": "tsx dogfood/openai-agents.ts",
@@ -171,6 +172,7 @@
     "tsup": "^8.3.0",
     "tsx": "^4.19.0",
     "typescript": "^5.6.0",
-    "vitest": "^2.1.0"
+    "vitest": "^2.1.0",
+    "vite": "7.3.6"
   }
 }

@@ -3,8 +3,13 @@
  *
  * Wraps a raw `openai` npm package client (`new OpenAI()` /
  * `new AzureOpenAI()` / any structurally-compatible client) so every
- * `chat.completions.create` call emits an `llm` span carrying model,
- * token counts, `cost_usd`, and pre-segmented `context_segments`.
+ * `chat.completions.create` and `responses.create` call emits an `llm`
+ * span carrying model, token counts, `cost_usd`, and pre-segmented
+ * `context_segments`.
+ *
+ * Streaming (`stream: true`) is NOT traced on either API: the call returns
+ * an async iterable rather than a response with usage, so it passes through
+ * with no span (tracked as MHQ-1407).
  *
  * TS port of `apps/sdk/python/src/morse_ai/adapters/openai.py`'s `wrap()`.
  * This module intentionally covers only the `wrap(client)` recommended
@@ -37,11 +42,12 @@
 
 import { decomposeOpenAiMessages } from "../_agent-sdk-common/context-decomposer";
 import { setActiveFramework } from "../_internal/active-framework";
-import { captureInputMessages, extractOpenAiOutputText } from "../_internal/llm-io";
+import { captureInputMessages, extractOpenAiOutputText, truncateText } from "../_internal/llm-io";
 import { calculateCost } from "../_internal/pricing";
 import type { ContextSegment } from "../_internal/spans";
 import { getActiveTraceState, runAsync as _runAsync, startSpan } from "../_internal/tracing";
 import { report } from "../_internal/diagnostics";
+import { applyEndUser } from "../_internal/end-user";
 
 /* ------------------------------------------------------------------------ */
 /*  Public types — minimal structural shapes, NOT a hard dep on `openai`     */
@@ -98,9 +104,36 @@ export interface OpenAiChatCompletionResponse {
   [key: string]: unknown;
 }
 
+/** Subset of the Responses API request (`client.responses.create`) we read. */
+export interface OpenAiResponsesCreateParams {
+  model: string;
+  input?: unknown;
+  instructions?: string | null;
+  tools?: OpenAiToolParam[];
+  [key: string]: unknown;
+}
+
+/** Subset of the Responses API response we read. */
+export interface OpenAiResponsesResponse {
+  id?: string;
+  model?: string;
+  output_text?: string;
+  output?: Array<{ type?: string; name?: string; arguments?: string; [k: string]: unknown }>;
+  usage?: {
+    input_tokens?: number;
+    output_tokens?: number;
+    total_tokens?: number;
+    input_tokens_details?: { cached_tokens?: number; [k: string]: unknown };
+    output_tokens_details?: { reasoning_tokens?: number; [k: string]: unknown };
+    [k: string]: unknown;
+  };
+  [key: string]: unknown;
+}
+
 /**
  * Structural shape of the plain OpenAI client we wrap. We only require
- * that `client.chat.completions.create` is a function returning a Promise.
+ * that `client.chat.completions.create` is a function returning a Promise;
+ * `client.responses.create` is optional (absent on `openai` < 4.87).
  */
 export interface OpenAiClientLike {
   chat: {
@@ -111,6 +144,13 @@ export interface OpenAiClientLike {
       ): Promise<OpenAiChatCompletionResponse>;
       [key: string]: unknown;
     };
+    [key: string]: unknown;
+  };
+  responses?: {
+    create(
+      params: OpenAiResponsesCreateParams,
+      options?: unknown,
+    ): Promise<OpenAiResponsesResponse>;
     [key: string]: unknown;
   };
   [key: string]: unknown;
@@ -166,7 +206,7 @@ export function wrapOpenAI<C extends OpenAiClientLike>(
   const originalCreate = client.chat?.completions?.create?.bind(client.chat.completions);
   if (typeof originalCreate !== "function") return client;
 
-  const patchedCreate = buildPatchedCreate(originalCreate, options);
+  const patchedCreate = buildPatchedCreate(originalCreate, options, "chat");
 
   // Construct a new `completions` object that proxies to the original for
   // any non-`create` access, wrapped in a `chat` proxy, wrapped in a
@@ -189,10 +229,30 @@ export function wrapOpenAI<C extends OpenAiClientLike>(
     },
   });
 
+  // Responses API (`client.responses.create`) is optional: clients without
+  // it (older `openai`, structural fakes) are left untouched.
+  const originalResponsesCreate = client.responses?.create?.bind(client.responses);
+  const patchedResponses =
+    typeof originalResponsesCreate === "function"
+      ? new Proxy(client.responses as object, {
+          get(target, prop, receiver) {
+            if (prop === "create") {
+              return buildPatchedCreate(originalResponsesCreate, options, "responses");
+            }
+            const value = Reflect.get(target, prop, receiver);
+            if (typeof value === "function") {
+              return (value as (...a: unknown[]) => unknown).bind(target);
+            }
+            return value;
+          },
+        })
+      : undefined;
+
   const wrapper = new Proxy(client, {
     get(target, prop, receiver) {
       if (prop === WRAPPED_CLIENT) return true;
       if (prop === "chat") return patchedChat;
+      if (prop === "responses" && patchedResponses) return patchedResponses;
       const value = Reflect.get(target, prop, receiver);
       if (typeof value === "function") return (value as (...a: unknown[]) => unknown).bind(target);
       return value;
@@ -212,33 +272,35 @@ export function isOpenAiWrapped(client: unknown): boolean {
 /*  Internals — wrapper that records an `llm` span                           */
 /* ------------------------------------------------------------------------ */
 
+type ApiKind = "chat" | "responses";
+
+/* eslint-disable @typescript-eslint/no-explicit-any -- chat and responses payloads differ; shapes are read defensively */
+type AnyCreate = (params: any, options?: unknown) => Promise<any>;
+
 function buildPatchedCreate(
-  original: (
-    params: OpenAiChatCompletionCreateParams,
-    options?: unknown,
-  ) => Promise<OpenAiChatCompletionResponse>,
+  original: AnyCreate,
   options: WrapOpenAiOptions,
-): (
-  params: OpenAiChatCompletionCreateParams,
-  options?: unknown,
-) => Promise<OpenAiChatCompletionResponse> {
+  api: ApiKind,
+): AnyCreate {
   const agentName = options.defaultAgentName;
+  const isResponses = api === "responses";
+  const spanName = isResponses ? "openai.responses.create" : "openai.chat.completions.create";
 
   return async function patchedCreate(
     this: unknown,
-    params: OpenAiChatCompletionCreateParams,
+    params: any,
     callOptions?: unknown,
-  ): Promise<OpenAiChatCompletionResponse> {
+  ): Promise<any> {
     const inTrace = getActiveTraceState() !== null;
 
-    const work = async (): Promise<OpenAiChatCompletionResponse> => {
+    const work = async (): Promise<any> => {
       setActiveFramework("openai");
       const handle = startSpan({
-        name: "openai.chat.completions.create",
+        name: spanName,
         type: "llm",
         metadata: { model: params?.model },
       });
-      let response: OpenAiChatCompletionResponse | undefined;
+      let response: any;
       try {
         response = await original.call(this, params, callOptions);
       } catch (err) {
@@ -251,17 +313,32 @@ function buildPatchedCreate(
       // Recording is best-effort — never let it throw at the caller.
       try {
         if (handle) {
-          const segments = safeExtractSegments(params);
+          const messages = isResponses ? responsesMessages(params) : params?.messages;
+          const segments = safeExtractSegments(messages, params?.tools);
+          applyEndUser(firstString(params?.user, params?.safety_identifier));
+          if (isResponses) {
+            const facts = responsesThreadFacts(response, params);
+            if (Object.keys(facts).length > 0) {
+              handle.span.metadata = { ...handle.span.metadata, ...facts };
+            }
+          }
           const usage = response?.usage ?? {};
-          const inputTokens = usage.prompt_tokens ?? 0;
-          const outputTokens = usage.completion_tokens ?? 0;
-          const cachedTokens = usage.prompt_tokens_details?.cached_tokens ?? 0;
+          const inputTokens = (isResponses ? usage.input_tokens : usage.prompt_tokens) ?? 0;
+          const outputTokens = (isResponses ? usage.output_tokens : usage.completion_tokens) ?? 0;
+          const cachedTokens =
+            (isResponses
+              ? usage.input_tokens_details?.cached_tokens
+              : usage.prompt_tokens_details?.cached_tokens) ?? 0;
           const model = response?.model ?? params?.model;
 
           handle.span.model = model;
           if (inputTokens > 0) handle.span.input_tokens = inputTokens;
           if (outputTokens > 0) handle.span.output_tokens = outputTokens;
           if (cachedTokens > 0) handle.span.cached_input_tokens = cachedTokens;
+          if (isResponses) {
+            const reasoning = usage.output_tokens_details?.reasoning_tokens ?? 0;
+            if (reasoning > 0) handle.span.reasoning_tokens = reasoning;
+          }
           const totalTokens =
             usage.total_tokens ??
             (inputTokens > 0 || outputTokens > 0 ? inputTokens + outputTokens : 0);
@@ -279,9 +356,11 @@ function buildPatchedCreate(
           handle.span.context_segments = segments;
           // MHQ-858: prompt/response capture, parity with the Python
           // adapter's input_data/output_data.
-          const inputData = captureInputMessages(params?.messages);
+          const inputData = captureInputMessages(messages);
           if (inputData !== undefined) handle.span.input_data = inputData;
-          const outputText = extractOpenAiOutputText(response?.choices);
+          const outputText = isResponses
+            ? extractResponsesOutputText(response)
+            : extractOpenAiOutputText(response?.choices);
           if (outputText !== undefined) handle.span.output_data = { content: outputText };
         }
       } catch (err) {
@@ -301,27 +380,100 @@ function buildPatchedCreate(
     // return `work()`'s Promise from inside `_runAsync`'s callback while
     // preserving typing AND having the fresh trace own the lifecycle, so
     // we wrap explicitly.
-    let result: OpenAiChatCompletionResponse | undefined;
+    let result: unknown;
     let thrown: unknown;
-    await _runAsync({ agentName }, async (runHandle) => {
-      runHandle.setOutcome(true);
-      try {
-        result = await work();
-      } catch (err) {
-        thrown = err;
-        throw err;
-      }
-      return null;
-    });
+    await _runAsync(
+      { agentName: isResponses ? (agentName ?? spanName) : agentName },
+      async (runHandle) => {
+        runHandle.setOutcome(true);
+        try {
+          result = await work();
+        } catch (err) {
+          thrown = err;
+          throw err;
+        }
+        return null;
+      },
+    );
     if (thrown !== undefined) throw thrown;
-    return result as OpenAiChatCompletionResponse;
+    return result;
   };
 }
+function firstString(...values: unknown[]): string | undefined {
+  for (const v of values) if (typeof v === "string" && v !== "") return v;
+  return undefined;
+}
 
-function safeExtractSegments(params: OpenAiChatCompletionCreateParams): ContextSegment[] {
+/** SETUP-09: `response_id` / `previous_response_id` / `conversation_id`, only keys present. */
+function responsesThreadFacts(response: any, params: any): Record<string, string> {
+  const facts: Record<string, string> = {};
+  const rid = firstString(response?.id);
+  if (rid !== undefined) facts.response_id = rid;
+  const prev = firstString(params?.previous_response_id);
+  if (prev !== undefined) facts.previous_response_id = prev;
+  const conv = params?.conversation;
+  const convId = typeof conv === "string" ? firstString(conv) : firstString(conv?.id);
+  if (convId !== undefined) facts.conversation_id = convId;
+  return facts;
+}
+/* eslint-enable @typescript-eslint/no-explicit-any */
+
+/**
+ * Normalise Responses API `instructions` + `input` into chat-style messages
+ * so input capture and the shared context decomposer see one shape for both
+ * APIs. Mirrors Python's `_responses_messages`: a string `input` is one user
+ * turn; list items carrying a `role` are kept, other item types
+ * (function_call_output, reasoning, ...) are skipped.
+ */
+function responsesMessages(
+  params: OpenAiResponsesCreateParams | undefined,
+): OpenAiChatMessageParam[] {
+  if (!params || typeof params !== "object") return [];
+  const out: OpenAiChatMessageParam[] = [];
+  if (typeof params.instructions === "string" && params.instructions) {
+    out.push({ role: "system", content: params.instructions });
+  }
+  const input = params.input;
+  if (typeof input === "string" && input) {
+    out.push({ role: "user", content: input });
+  } else if (Array.isArray(input)) {
+    for (const item of input) {
+      const m = item as { role?: unknown; content?: unknown } | null;
+      if (m && typeof m === "object" && typeof m.role === "string") {
+        out.push({ role: m.role, content: m.content });
+      }
+    }
+  }
+  return out;
+}
+
+/**
+ * Text output of a Responses API response: `output_text` plus any
+ * `function_call` items as `[tool_call:name] args`, so a tool-only turn is
+ * not blank. Mirrors Python's `_extract_responses_output_text`.
+ */
+function extractResponsesOutputText(
+  response: OpenAiResponsesResponse | undefined,
+): string | undefined {
+  const parts: string[] = [];
+  if (typeof response?.output_text === "string" && response.output_text) {
+    parts.push(response.output_text);
+  }
+  for (const item of response?.output ?? []) {
+    if (item?.type !== "function_call") continue;
+    const label = `[tool_call:${item.name || "tool"}]`;
+    parts.push(item.arguments ? `${label} ${item.arguments}` : label);
+  }
+  if (parts.length === 0) return undefined;
+  return truncateText(parts.join("\n"));
+}
+
+function safeExtractSegments(messages: unknown, tools: unknown): ContextSegment[] {
   try {
-    if (!params || typeof params !== "object") return [];
-    return decomposeOpenAiMessages(params.messages, params.tools);
+    return decomposeOpenAiMessages(
+      messages as OpenAiChatMessageParam[] | undefined,
+      tools as OpenAiToolParam[] | undefined,
+    );
   } catch {
     return [];
   }

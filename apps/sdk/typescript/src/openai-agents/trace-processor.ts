@@ -31,13 +31,20 @@
 import { summarizeToolInput, summarizeToolOutput } from "../_agent-sdk-common/redaction";
 import {
   emitAgentSpan,
+  emitChainSpan,
   emitLlmSpan,
   emitSubagentSpan,
   emitToolSpan,
 } from "../_agent-sdk-common/span-emitter";
 import { captureInputMessages, extractOpenAiOutputText } from "../_internal/llm-io";
 import { calculateCost } from "../_internal/pricing";
-import type { SpanHandle } from "../_internal/tracing";
+import {
+  adoptFrameworkRoot,
+  getFrameworkRoot,
+  withParentSpan,
+  type SpanHandle,
+} from "../_internal/tracing";
+import { isLegacyIdentity } from "../_internal/agent-name";
 import { report } from "../_internal/diagnostics";
 
 const ADAPTER = "openai-agents" as const;
@@ -119,6 +126,8 @@ export class MorseTraceProcessor {
    * exported until the outer trace closes), so a late patch still lands.
    */
   private readonly closedResponseSpans = new Map<string, SpanHandle>();
+  /** AID-02: agents a handoff span already represents as sub-agents. */
+  private readonly handoffTargets = new Set<string>();
 
   constructor(options: MorseTraceProcessorOptions = {}) {
     this.options = options;
@@ -257,6 +266,7 @@ export class MorseTraceProcessor {
     }
     this.openSpans.clear();
     this.closedResponseSpans.clear();
+    this.handoffTargets.clear();
   }
 
   async forceFlush(): Promise<void> {
@@ -266,15 +276,40 @@ export class MorseTraceProcessor {
   /* -- Internals ------------------------------------------------------ */
 
   private openSpanFor(span: OpenAISpanLike): SpanHandle | null {
+    // AID-05: parent by the SDK's own span tree, not by whichever span opened last.
+    const parent =
+      typeof span.parentId === "string"
+        ? this.openSpans.get(span.parentId)?.span.span_id
+        : undefined;
+    return withParentSpan(parent, () => this.openSpanForType(span));
+  }
+
+  private openSpanForType(span: OpenAISpanLike): SpanHandle | null {
     const d = span.spanData ?? {};
     const type = typeof d.type === "string" ? d.type : "";
     const name = typeof d.name === "string" && d.name.length > 0 ? d.name : undefined;
 
     switch (type) {
-      case "agent":
-        return emitAgentSpan({
+      case "agent": {
+        const agentName = name ?? "openai-agent";
+        if (isLegacyIdentity()) return emitAgentSpan({ adapter: ADAPTER, agentName });
+        // AID-01/02: the starting agent IS the trace root and a handoff target is already
+        // a sub-agent span; recording either again as an agent span is the 3-per-run
+        // duplication. Only other agents (e.g. `agent.asTool()`) are agent spans.
+        if (getFrameworkRoot() === undefined) adoptFrameworkRoot(agentName);
+        if (agentName === getFrameworkRoot() || this.handoffTargets.has(agentName)) {
+          return emitChainSpan({ adapter: ADAPTER, name: agentName });
+        }
+        return emitAgentSpan({ adapter: ADAPTER, agentName });
+      }
+
+      // AID-02: SDK run/turn envelopes, previously mislabelled as tools
+      // (`task.Agent workflow`, `turn.anon`).
+      case "task":
+      case "turn":
+        return emitChainSpan({
           adapter: ADAPTER,
-          agentName: name ?? "openai-agent",
+          name: name && name !== "anon" ? `${type}: ${name}` : type,
         });
 
       case "generation":
@@ -297,6 +332,7 @@ export class MorseTraceProcessor {
       }
 
       case "handoff":
+        if (typeof d.to_agent === "string") this.handoffTargets.add(d.to_agent);
         return emitSubagentSpan({
           adapter: ADAPTER,
           parentAgentName: typeof d.from_agent === "string" ? d.from_agent : "unknown",
