@@ -9,6 +9,19 @@ The TypeScript and Python SDKs version **independently** — they share `0.4.0` 
 their first public release because they reached feature parity there, not
 because they are released in lockstep. Expect the numbers to diverge.
 
+## [Unreleased — next minor] Vercel AI SDK telemetry helper (MHQ-1216)
+
+### Added
+
+- **`morseTelemetry()` and `morseTracer()`** in `@morsehq-dev/sdk/vercel-ai`: send the Vercel AI
+  SDK's own OpenTelemetry spans to Morse without swapping `generateText` / `streamText` for the
+  traced wrappers. `morseTelemetry({ integration: LegacyOpenTelemetry, functionId, threadId, userId,
+metadata })` returns the `telemetry` settings for a call; `morseTracer()` returns the bare
+  `Tracer`. Spans use the SDK's private provider (never registered globally) and its existing
+  sampling, redaction and OTLP export. Without `morse.init()`, or in the browser build, it returns
+  `{ isEnabled: false }` and warns once. `createTracedVercelAI()` is unchanged.
+- `@ai-sdk/otel` as an optional peer dependency (needed only for `morseTelemetry()`).
+
 ## [Unreleased — next minor] Agent identity v2 (MHQ-1408)
 
 Behaviour change, default on. `MORSE_AGENT_IDENTITY=legacy` restores the old naming and span shapes.

@@ -297,6 +297,44 @@ const { streamText, generateText, generateObject } = await createTracedVercelAI(
 // like ai's own — same call signature, same return shape.
 ```
 
+#### Use the AI SDK's own telemetry
+
+Prefer to keep importing `generateText` / `streamText` from `ai`? Send the AI
+SDK's own OpenTelemetry spans to Morse instead. `ai@7` emits them through an
+integration from [`@ai-sdk/otel`](https://www.npmjs.com/package/@ai-sdk/otel)
+(an optional peer dependency — install it yourself), so pass that class in:
+
+```ts
+import { generateText } from "ai";
+import { LegacyOpenTelemetry } from "@ai-sdk/otel";
+import * as morse from "@morsehq-dev/sdk";
+import { morseTelemetry } from "@morsehq-dev/sdk/vercel-ai";
+
+morse.init({ apiKey: process.env.MORSE_API_KEY });
+
+await generateText({
+  model,
+  prompt,
+  telemetry: morseTelemetry({
+    integration: LegacyOpenTelemetry, // or OpenTelemetry (GenAI semconv names)
+    functionId: "support-agent", // also names the agent for a root span
+    threadId, // -> ai.telemetry.metadata.thread_id
+    userId, // -> ai.telemetry.metadata.user_id
+  }),
+});
+```
+
+- Spans (`ai.generateText`, `ai.generateText.doGenerate`, `ai.toolCall`, ...) go
+  through the same sampling, redaction and OTLP exporter as the rest of the SDK.
+  Morse's tracer is private: your own OpenTelemetry setup is not touched and does
+  not see these spans.
+- Needs `morse.init()` first. Otherwise (and in the browser build) it returns
+  `{ isEnabled: false }` and prints one warning. It never throws.
+- Inside `morse.run()` the AI SDK spans join that trace.
+- Use this **or** `createTracedVercelAI()` for a given call, not both.
+- Need a bare tracer (for `new OpenTelemetry({ tracer, ...options })` or a
+  pre-v7 `ai`)? `morseTracer()` returns one.
+
 ### `@morsehq-dev/sdk/integrations/pino` — pino log forwarding
 
 Ship pino log lines to Morse, auto-correlated with the active trace.

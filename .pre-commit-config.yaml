@@ -46,12 +46,16 @@ repos:
         # cover pnpm-lock.yaml reliably, so exclude lock files explicitly.
         # The demo seed fixture's `content_hash` fields are sha256 digests of
         # prompt text (deterministic content hashes, not secrets) — same
-        # high-entropy false-positive class, excluded the same way.
+        # high-entropy false-positive class, excluded the same way. So are the
+        # framework capture fixtures: OTLP trace/span ids are random hex, and
+        # the captures run against a fake model with a fake key
+        # (scripts/otlp-fixtures/). Excluding the path beats growing the
+        # baseline by hundreds of id entries per capture.
         args:
           - "--baseline"
           - ".secrets.baseline"
           - "--exclude-files"
-          - "(^|/)pnpm-lock\\.yaml$|(^|/)yarn\\.lock$|(^|/)package-lock\\.json$|^apps/api/apps/core/demo_seed/fixtures/"
+          - "(^|/)pnpm-lock\\.yaml$|(^|/)yarn\\.lock$|(^|/)package-lock\\.json$|^apps/api/apps/core/demo_seed/fixtures/|^apps/api/tests/traces/fixtures/frameworks/"
 
   # Python security linting — HIGH severity only, excludes tests/ (DEV-02)
   - repo: https://github.com/PyCQA/bandit

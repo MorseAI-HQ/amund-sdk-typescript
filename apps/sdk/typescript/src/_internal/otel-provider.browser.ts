@@ -101,6 +101,15 @@ export class OtelEngine {
     return true;
   }
 
+  /**
+   * No OTLP pipeline in a browser, so there is no tracer to hand out —
+   * `null` is the same "not available" answer the Node engine gives before
+   * `configure()` (MHQ-1216: `morseTelemetry()` reports it and no-ops).
+   */
+  getTracer(): null {
+    return null;
+  }
+
   registerInstrumentations(
     instrumentations: unknown[],
     wrapProvider?: unknown,

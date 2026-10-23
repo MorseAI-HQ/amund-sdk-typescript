@@ -35,6 +35,11 @@
  * to silently patch); it's a `DETECT_ONLY_TARGETS` entry in
  * `_internal/auto-detect.ts` that points here.
  *
+ * MHQ-1216: the other route. `morseTelemetry()` / `morseTracer()` (see
+ * `./telemetry.ts`) send the AI SDK's OWN OpenTelemetry spans to Morse, so
+ * `generateText` etc. keep being imported from `ai` untouched. The two routes
+ * are independent; do not enable both for the same call or it is recorded twice.
+ *
  * MHQ-750: Python has no Vercel AI equivalent to mirror (it doesn't exist
  * as a Python package), so `context_segments` support here is a TS-only
  * extension. It's wired in because the Vercel AI SDK's `CoreMessage[]`
@@ -51,6 +56,15 @@ import { injectTraceparent } from "../propagation";
 import { decomposeOpenAiMessages } from "../_agent-sdk-common/context-decomposer";
 import { emitLlmSpan } from "../_agent-sdk-common/span-emitter";
 import { captureInputMessages, truncateText } from "../_internal/llm-io";
+
+export { morseTelemetry, morseTracer } from "./telemetry";
+export type {
+  MorseTelemetryMetadata,
+  MorseTelemetryOptions,
+  MorseTelemetrySettings,
+  MorseTracerOptions,
+  TelemetryIntegrationClass,
+} from "./telemetry";
 
 const ADAPTER = "vercel-ai" as const;
 

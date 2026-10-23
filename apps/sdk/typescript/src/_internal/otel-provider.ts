@@ -659,6 +659,27 @@ export class OtelEngine {
     this.recorder = null;
   }
 
+  /**
+   * The engine's tracer, for third-party code that accepts a `Tracer`
+   * (MHQ-1216: the Vercel AI SDK's OpenTelemetry integrations). Spans started
+   * from it flow through the same sampler -> `BatchSpanProcessor` ->
+   * `RedactingSpanExporter` -> OTLP chain as every other SDK span, WITHOUT
+   * registering Morse's provider as the process-global one.
+   *
+   * Also installs the global async-hooks `ContextManager` (idempotent, see
+   * `ensureGlobalContextManager`): `startActiveSpan` / `context.with` only
+   * nest child spans under their parent when one exists, and the SDK
+   * deliberately does not call `provider.register()` (which would install it).
+   *
+   * `null` until `configure()` has run (and again after `shutdown()`), so
+   * callers can tell "not initialised" from "initialised".
+   */
+  getTracer(): OtelTracer | null {
+    if (this.tracer === null) return null;
+    ensureGlobalContextManager();
+    return this.tracer;
+  }
+
   /** Block until in-flight exports finish (or the timeout elapses). */
   async flush(): Promise<void> {
     const provider = this.provider;
