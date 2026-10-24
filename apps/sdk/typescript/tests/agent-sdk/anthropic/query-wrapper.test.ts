@@ -123,19 +123,19 @@ describe("wrapClaudeAgentQuery — the real query() shape", () => {
     expect(events).toEqual(MESSAGES);
   });
 
-  it("emits one adapter agent span carrying the model from params.options", async () => {
+  it("records ONE agent span (the trace root) carrying the model from params.options", async () => {
+    // @spec: MHQ-1416
     const { query } = makeFakeQuery();
     const { spans } = await drain(
       wrapClaudeAgentQuery(query)({ prompt: "hi", options: { model: "claude-opus-4-5" } }),
     );
 
-    // Two `agent` spans are expected outside an existing trace: the implicit
-    // root opened by runAsync, plus the adapter's own. Assert on the adapter's.
-    const emitted = spans.filter(
-      (s) => s.type === "agent" && s.metadata?.adapter === "anthropic-agent-sdk",
-    );
-    expect(emitted).toHaveLength(1);
-    expect(emitted[0]?.model).toBe("claude-opus-4-5");
+    // MHQ-1416 / AID-02: the implicit root opened by runAsync IS the agent; the
+    // adapter no longer adds a second `anthropic-agent-sdk.agent` span under it.
+    const agents = spans.filter((s) => s.type === "agent");
+    expect(agents).toHaveLength(1);
+    expect(agents[0]?.model).toBe("claude-opus-4-5");
+    expect(agents[0]?.parent_span_id).toBeUndefined();
   });
 
   it("is idempotent — wrapping twice does not double-count spans", async () => {
@@ -147,9 +147,8 @@ describe("wrapClaudeAgentQuery — the real query() shape", () => {
     expect(isClaudeAgentQueryWrapped(twice)).toBe(true);
 
     const { spans } = await drain(twice({ prompt: "hi" }));
-    expect(
-      spans.filter((s) => s.type === "agent" && s.metadata?.adapter === "anthropic-agent-sdk"),
-    ).toHaveLength(1);
+    expect(spans.filter((s) => s.type === "agent")).toHaveLength(1);
+    expect(spans.filter((s) => s.type === "llm")).toHaveLength(1);
   });
 });
 
@@ -245,6 +244,22 @@ function assistantChunk(id: string, block: Record<string, unknown>): SDKMessageL
     },
   } as unknown as SDKMessageLike;
 }
+
+describe("wrapClaudeAgentQuery — MHQ-1416 model alias and framework", () => {
+  it("records the served model, not the 'haiku' alias, and tags the framework", async () => {
+    const { query } = makeFakeQuery([
+      assistantChunk("msg_a", { type: "text", text: "hi" }),
+      { type: "result", subtype: "success" } as unknown as SDKMessageLike,
+    ]);
+    const { spans } = await drain(
+      wrapClaudeAgentQuery(query)({ prompt: "hi", options: { model: "haiku" } }),
+    );
+    const agent = spans.find((s) => s.type === "agent");
+    expect(agent?.model).toBe("claude-haiku-4-5-20251001");
+    const trace = getLastTrace() as { resource?: Record<string, unknown> } | null;
+    expect(trace?.resource?.["morse_ai.framework"]).toBe("claude-agent-sdk");
+  });
+});
 
 describe("wrapClaudeAgentQuery — llm spans from the real per-block message stream", () => {
   it("emits ONE llm span for one API call split across several assistant events", async () => {

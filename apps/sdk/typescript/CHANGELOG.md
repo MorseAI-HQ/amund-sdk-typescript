@@ -9,9 +9,66 @@ The TypeScript and Python SDKs version **independently** — they share `0.4.0` 
 their first public release because they reached feature parity there, not
 because they are released in lockstep. Expect the numbers to diverge.
 
-## [Unreleased — next minor] Vercel AI SDK telemetry helper (MHQ-1216)
+## [0.7.0] — Unreleased (release candidate `0.7.0-rc.1`)
 
-### Added
+`0.7.0` was never published (npm `latest` is `0.6.0`), so everything below ships together as
+`0.7.0`, published as **`@morsehq-dev/sdk`** (founder decision 2026-10-24, MHQ-1411; the in-repo
+`@morsehq/sdk` is only the pnpm workspace id and is rewritten by the release workflow). The release
+goes out as `0.7.0-rc.1` first (SDK_PUBLISHING.md §1.1).
+
+### Fixed — launch verification (2026-10-24)
+
+- **Anthropic streaming is traced** (MHQ-1415). `messages.create({ stream: true })` records model,
+  input/output/cache tokens, cost and the streamed text when the stream ends (it recorded no usage,
+  so the server estimated 4 input / 0 output tokens). `messages.stream()` is traced too. Spans carry
+  `metadata.streamed`; a stream the caller abandons is kept with `metadata.stream_incomplete`; a
+  failed request records a failed span with the requested model.
+- **`messages.stream()` and `.withResponse()` work under the zero-config install** (MHQ-1415). The
+  patched `create` returned a plain Promise, so the SDK's own `create().withResponse()` call inside
+  `messages.stream()` threw `withResponse is not a function`. It now returns the SDK's `APIPromise`.
+- **The zero-config Anthropic install patches the CommonJS build** (MHQ-1415). Install state is
+  kept per patched prototype instead of on the module object, which is a function (CommonJS) or
+  frozen (ESM namespace); the old write threw after patching, so CommonJS clients went untraced
+  and `wrapAnthropic` then recorded ESM calls twice.
+- **LangChain prompt-cache writes are reported as cache writes** (MHQ-1414). They were sent as
+  cached reads (`cache_read ?? cache_creation`), pricing a cache write at the read rate.
+- **openai-agents span errors keep their message and class** (MHQ-1411): failed child spans stored
+  `[object Object]` with `exception_type=Error`.
+- **Claude Agent SDK: served model and framework** (MHQ-1416). The agent span records the dated
+  model the CLI actually ran instead of the `options.model` alias (`haiku`), and the trace carries
+  framework `claude-agent-sdk` (was NULL).
+- **Redaction leaves identifiers alone** (MHQ-1412): the phone, card and SSN patterns no longer
+  match digit runs inside UUIDs and hex ids. Keys, JWTs, secrets and emails are still redacted.
+
+### Fixed — WP-13 TS SDK (2026-10-24)
+
+- **OpenAI streaming is traced** (MHQ-1407). `wrapOpenAI` records model, tokens, cached tokens,
+  cost and output for `chat.completions.create({ stream: true })` and
+  `responses.create({ stream: true })` when the stream ends (it passed through untraced). Without
+  `stream_options.include_usage` the span says `metadata.usage_unavailable`.
+- **`wrapOpenAI` keeps the SDK's `APIPromise`.** The wrapper returned a plain Promise, so
+  `.withResponse()` / `.asResponse()` threw on a wrapped client (same bug as the Anthropic one).
+  A failed request now records a failed span with the requested model and exception type.
+- **Streamed routes keep their trace** (MHQ-1407). A stream returned from `morse.run()` and read
+  afterwards (`return result.toUIMessageStreamResponse()`) holds the trace open until it ends
+  (at most 10 minutes), for the Vercel AI, OpenAI and Anthropic adapters. The trace used to close
+  in milliseconds with the agent span alone; `run()` itself still returns immediately.
+- **Vercel AI `streamText` records its llm span on ai@7** (MHQ-1407). Without `run()` the
+  auto-opened trace closed as soon as `usage` resolved, before the llm span ended, so ai@7 traces
+  had the agent span only and $0. Tool results become `tool` spans; a failed stream marks the
+  auto-opened trace failed with `success: false` (was `status=failed, success=true`); and a failed
+  stream no longer raises an unhandled `AI_NoOutputGeneratedError` rejection from the wrapper.
+- **Claude Agent SDK: one agent span** (MHQ-1416). The trace root is the agent and carries the
+  served model; the adapter no longer adds an `anthropic-agent-sdk.agent` span under `run()`'s root
+  (or under its own bridge trace). `defaultAgentName` names the agent and a surrounding `run("app")`
+  becomes the `morse.app` label. `MORSE_AGENT_IDENTITY=legacy` keeps the old span.
+- **Bundled pricing has the WP-8 catalog rows**: the same 50 models the Python SDK gained (OpenAI
+  gpt-5.1 to gpt-6.x, gpt-5-pro, o3-pro, o1-pro; Gemini 3.x/4; Bedrock Nova, Llama, Mistral, gpt-oss;
+  Claude Mythos 5/5.1), matching the server catalog.
+- **`setPrompt` reads string versions** (MHQ-1415). `"3"` / `"v3"` are recorded as version 3 instead
+  of being dropped silently; any other non-integer version is dropped with a one-time warning.
+
+### Added — Vercel AI SDK telemetry helper (MHQ-1216)
 
 - **`morseTelemetry()` and `morseTracer()`** in `@morsehq-dev/sdk/vercel-ai`: send the Vercel AI
   SDK's own OpenTelemetry spans to Morse without swapping `generateText` / `streamText` for the
@@ -22,11 +79,9 @@ metadata })` returns the `telemetry` settings for a call; `morseTracer()` return
   `{ isEnabled: false }` and warns once. `createTracedVercelAI()` is unchanged.
 - `@ai-sdk/otel` as an optional peer dependency (needed only for `morseTelemetry()`).
 
-## [Unreleased — next minor] Agent identity v2 (MHQ-1408)
+### Changed — Agent identity v2 (MHQ-1408)
 
 Behaviour change, default on. `MORSE_AGENT_IDENTITY=legacy` restores the old naming and span shapes.
-
-### Changed
 
 - **Identity ladder.** Agent name resolves `run()` name > framework-native root (graph / starting
   agent) > `service.name` > entry script. The trace carries `identity_source`
@@ -40,11 +95,9 @@ Behaviour change, default on. `MORSE_AGENT_IDENTITY=legacy` restores the old nam
 - **`run("name")` is a label** when an adapter discovers a root: the trace's agent is the discovered
   root and the name is sent as `morse.app` (trace metadata `morse_app`).
 
-### Fixed
+### Fixed — run name alias
 
 - `run({ name })` is accepted as an alias of `run({ agentName })` instead of being silently ignored (MHQ-1415).
-
-## [0.7.0] — Unreleased
 
 ### Added
 
@@ -52,8 +105,7 @@ Behaviour change, default on. `MORSE_AGENT_IDENTITY=legacy` restores the old nam
   `openai.responses.create` `llm` span alongside the existing `chat.completions.create` span, with
   model, input/output/cached/reasoning tokens, cost, and prompt/response capture (`instructions`
   as a system message, `input` as a string or message items, `function_call` output as
-  `[tool_call:name] args`). A client without `responses` is unaffected. Streaming
-  (`stream: true`) is still not traced on either API (MHQ-1407). Parity with the Python SDK.
+  `[tool_call:name] args`). A client without `responses` is unaffected. Parity with the Python SDK.
 - **`getPrompt(name, { label?, version?, ifNoneMatch?, cacheTtlSeconds? })`** fetches a hosted prompt
   from the registry (`GET /api/v1/prompts/{name}`, needs a key with the `prompts:read` scope).
   Resolves to a `Prompt` (`name, version, templateText, labels, etag`); a 304 gives

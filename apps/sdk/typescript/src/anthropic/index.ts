@@ -38,7 +38,13 @@ import { generateSpanId, nowIso } from "../_internal/spans";
 import { setActiveFramework } from "../_internal/active-framework";
 import { captureInputMessages, extractAnthropicOutputText } from "../_internal/llm-io";
 import { applyEndUser } from "../_internal/end-user";
-import { getActiveTraceState, runAsync as _runAsync, startSpan } from "../_internal/tracing";
+import {
+  getActiveTraceState,
+  holdTraceOpen,
+  runAsync as _runAsync,
+  startDetachedSpan,
+  startSpan,
+} from "../_internal/tracing";
 
 /* ------------------------------------------------------------------------ */
 /*  Public types — minimal structural shapes, NOT a hard dep on `@anthropic-ai/sdk` */
@@ -162,6 +168,25 @@ interface InstalledModule {
   [ORIGINALS_SENTINEL]?: OriginalsBag;
 }
 
+/**
+ * Install state keyed by the patched `Messages.prototype`, not by properties on
+ * the module object. The CommonJS export of `@anthropic-ai/sdk` is the client
+ * *class* (a function) and an ESM namespace is not extensible, so writing a
+ * sentinel onto the module threw after the prototype was already patched: the
+ * install reported failure, `wrapAnthropic` then recorded every call a second
+ * time, and the CommonJS build was never patched at all (MHQ-1415 follow-up).
+ */
+const patchedPrototypes = new WeakMap<object, OriginalsBag>();
+
+function markModule(mod: unknown, installed: boolean, bag?: OriginalsBag): void {
+  try {
+    (mod as InstalledModule)[INSTALL_SENTINEL] = installed;
+    (mod as InstalledModule)[ORIGINALS_SENTINEL] = bag;
+  } catch {
+    // non-extensible namespace: the WeakMap is the source of truth
+  }
+}
+
 /* ------------------------------------------------------------------------ */
 /*  Public API                                                               */
 /* ------------------------------------------------------------------------ */
@@ -199,6 +224,25 @@ export interface InstrumentAnthropicOptions {
 }
 
 /**
+ * Whether this client's `messages` inherits a prototype the global install
+ * patched. `undefined` for a plain-object (duck-typed) client, where only the
+ * global flag can answer. The CommonJS and ESM builds of `@anthropic-ai/sdk`
+ * are separate classes, so a global install of one must not stop `wrapAnthropic`
+ * from instrumenting a client built from the other.
+ */
+function clientUsesPatchedPrototype(client: AnthropicClientLike): boolean | undefined {
+  const msgs = (client as { messages?: unknown }).messages;
+  if (!msgs || typeof msgs !== "object") return undefined;
+  let proto: object | null = Object.getPrototypeOf(msgs) as object | null;
+  if (proto === null || proto === Object.prototype) return undefined;
+  while (proto !== null && proto !== Object.prototype) {
+    if (patchedPrototypes.has(proto)) return true;
+    proto = Object.getPrototypeOf(proto) as object | null;
+  }
+  return false;
+}
+
+/**
  * Wrap an Anthropic client so every `messages.create` call records an
  * `llm` span with `context_segments`. The wrapper preserves the rest of
  * the client's surface (other resources, helpers, etc.) via a Proxy.
@@ -215,7 +259,8 @@ export function wrapAnthropic<C extends AnthropicClientLike>(
   // A global install (manual `instrumentAnthropic()` or auto-detect) is
   // already recording every call at the prototype level — see
   // `globalInstallActive` doc comment above.
-  if (globalInstallActive) return client;
+  const patched = clientUsesPatchedPrototype(client);
+  if (patched === true || (patched === undefined && globalInstallActive)) return client;
 
   const originalCreate = client.messages?.create?.bind(client.messages);
   if (typeof originalCreate !== "function") return client;
@@ -229,6 +274,11 @@ export function wrapAnthropic<C extends AnthropicClientLike>(
     get(target, prop, receiver) {
       if (prop === "create") return patchedCreate;
       const value = Reflect.get(target, prop, receiver);
+      // MHQ-1415: `messages.stream()` calls `this.create({ stream: true })`;
+      // bound to the proxy it goes through the patched create and is traced.
+      if (prop === "stream" && typeof value === "function") {
+        return (value as (...a: unknown[]) => unknown).bind(receiver);
+      }
       // Bind methods so `this` continues to point at the original.
       if (typeof value === "function") return (value as (...a: unknown[]) => unknown).bind(target);
       return value;
@@ -271,14 +321,12 @@ export const instrumentAnthropic = absorbErrorsAsync(
     const opts = (clientOrOptions as InstrumentAnthropicOptions | undefined) ?? {};
     const mod = await loadAnthropicModule(opts.anthropicModule);
     if (!mod) return false;
-    const installed = (mod as InstalledModule)[INSTALL_SENTINEL] === true;
-    if (installed) {
+    const carrier = findMessagesPrototypeCarrier(mod);
+    if (!carrier) return false;
+    if (patchedPrototypes.has(carrier.prototype)) {
       globalInstallActive = true;
       return true;
     }
-
-    const carrier = findMessagesPrototypeCarrier(mod);
-    if (!carrier) return false;
     const originalCreate = carrier.prototype.create;
     if (typeof originalCreate !== "function") return false;
 
@@ -294,11 +342,9 @@ export const instrumentAnthropic = absorbErrorsAsync(
       );
     }, opts);
     carrier.prototype.create = patchedCreate as unknown as typeof carrier.prototype.create;
-    (mod as InstalledModule)[ORIGINALS_SENTINEL] = {
-      protoCreate: originalCreate,
-      protoCarrier: carrier,
-    };
-    (mod as InstalledModule)[INSTALL_SENTINEL] = true;
+    const bag: OriginalsBag = { protoCreate: originalCreate, protoCarrier: carrier };
+    patchedPrototypes.set(carrier.prototype, bag);
+    markModule(mod, true, bag);
     globalInstallActive = true;
     return true;
   },
@@ -315,16 +361,21 @@ export const instrumentAnthropic = absorbErrorsAsync(
  */
 export const uninstallAnthropic = absorbErrorsSync(
   (anthropicModule?: unknown): void => {
-    if (!anthropicModule || typeof anthropicModule !== "object") return;
-    const mod = anthropicModule as InstalledModule;
-    if (!mod[INSTALL_SENTINEL]) return;
-    const originals = mod[ORIGINALS_SENTINEL];
-    if (originals?.protoCarrier && originals.protoCreate !== undefined) {
+    if (
+      !anthropicModule ||
+      (typeof anthropicModule !== "object" && typeof anthropicModule !== "function")
+    ) {
+      return;
+    }
+    const carrier = findMessagesPrototypeCarrier(anthropicModule);
+    const originals = carrier ? patchedPrototypes.get(carrier.prototype) : undefined;
+    if (!originals) return;
+    if (originals.protoCarrier && originals.protoCreate !== undefined) {
       originals.protoCarrier.prototype.create =
         originals.protoCreate as typeof originals.protoCarrier.prototype.create;
     }
-    mod[ORIGINALS_SENTINEL] = undefined;
-    mod[INSTALL_SENTINEL] = false;
+    patchedPrototypes.delete(carrier!.prototype);
+    markModule(anthropicModule, false, undefined);
     globalInstallActive = false;
   },
   { fingerprint: "morse.adapters.anthropic.uninstall" },
@@ -355,7 +406,8 @@ function isClient(x: unknown): x is AnthropicClientLike {
 }
 
 async function loadAnthropicModule(explicit?: unknown): Promise<unknown | null> {
-  if (explicit && typeof explicit === "object") return explicit;
+  // The CommonJS export is the client class itself, so accept a function too.
+  if (explicit && (typeof explicit === "object" || typeof explicit === "function")) return explicit;
   try {
     // Function-eval'd dynamic import keeps bundlers from trying to resolve
     // `@anthropic-ai/sdk` at build time when the dep isn't installed.
@@ -372,7 +424,7 @@ async function loadAnthropicModule(explicit?: unknown): Promise<unknown | null> 
  * versions; we try the most common shapes.
  */
 function findMessagesPrototypeCarrier(mod: unknown): { prototype: { create: unknown } } | null {
-  if (!mod || typeof mod !== "object") return null;
+  if (!mod || (typeof mod !== "object" && typeof mod !== "function")) return null;
   const m = mod as Record<string, unknown>;
 
   // Strategy 1: `mod.Anthropic.Messages` (default-export class with static).
@@ -395,6 +447,139 @@ function findMessagesPrototypeCarrier(mod: unknown): { prototype: { create: unkn
 /*  Internals — wrapper that records an `llm` span                           */
 /* ------------------------------------------------------------------------ */
 
+/**
+ * The Anthropic SDK's `create()` returns an `APIPromise`: a Promise with extra
+ * methods (`withResponse()`, `asResponse()`) that the SDK itself relies on —
+ * `messages.stream()` calls `create(...).withResponse()`. A wrapper that
+ * returns a plain Promise breaks those callers (MHQ-1415: `messages.stream()`
+ * threw `withResponse is not a function` under the auto-detect install).
+ * `_thenUnwrap` maps the resolved value while keeping the APIPromise shape;
+ * fakes and very old SDKs without it fall back to `.then`.
+ */
+interface ApiPromiseLike<T> extends PromiseLike<T> {
+  _thenUnwrap?: <U>(transform: (data: T) => U) => PromiseLike<U>;
+}
+
+function mapKeepingShape<T, U>(p: PromiseLike<T>, transform: (data: T) => U): PromiseLike<U> {
+  const api = p as ApiPromiseLike<T>;
+  if (typeof api._thenUnwrap === "function") return api._thenUnwrap(transform);
+  return p.then(transform);
+}
+
+/** Observe a rejection without handling it for the caller. */
+function onRejected(p: PromiseLike<unknown>, handler: (err: unknown) => void): void {
+  try {
+    // `p.then` directly (not `Promise.resolve(p)`), so this handler runs before
+    // the caller's own `await` resumes and can still close the span in-trace.
+    p.then(undefined, (err: unknown) => {
+      try {
+        handler(err);
+      } catch {
+        // swallow — telemetry must never break the caller
+      }
+    });
+  } catch {
+    // swallow
+  }
+}
+
+const SPAN_NAME = "anthropic.messages.create";
+
+function spanOptions(params: AnthropicMessageCreateParams) {
+  return {
+    name: SPAN_NAME,
+    type: "llm" as const,
+    metadata: { model: params?.model, max_tokens: params?.max_tokens },
+  };
+}
+
+/** Fill an llm span from a non-streaming Message. Best-effort, never throws. */
+function fillResponseSpan(
+  span: SpanData,
+  params: AnthropicMessageCreateParams,
+  response: AnthropicMessageResponse | undefined,
+): void {
+  try {
+    const segments = safeExtractSegments(params, response);
+    applyEndUser((params?.metadata as { user_id?: unknown } | undefined)?.user_id);
+    const usage = response?.usage ?? {};
+    const inputTokens =
+      (usage.input_tokens ?? 0) +
+      (usage.cache_creation_input_tokens ?? 0) +
+      (usage.cache_read_input_tokens ?? 0);
+    const outputTokens = usage.output_tokens ?? 0;
+    span.model = response?.model ?? params?.model;
+    if (inputTokens > 0) span.input_tokens = inputTokens;
+    if (outputTokens > 0) span.output_tokens = outputTokens;
+    const cacheWrite = usage.cache_creation_input_tokens ?? 0;
+    const cacheRead = usage.cache_read_input_tokens ?? 0;
+    if (cacheWrite > 0) span.cache_write_tokens = cacheWrite;
+    if (cacheRead > 0) span.cached_input_tokens = cacheRead;
+    if (inputTokens > 0 || outputTokens > 0) {
+      span.total_tokens = inputTokens + outputTokens;
+    }
+    if (span.cost_usd === undefined && span.model && (inputTokens > 0 || outputTokens > 0)) {
+      const cost = calculateCost({
+        inputTokens,
+        outputTokens,
+        model: span.model,
+        cachedInputTokens: cacheRead,
+        cacheWriteTokens: cacheWrite,
+      });
+      if (cost !== undefined) span.cost_usd = cost;
+    }
+    span.context_segments = segments;
+    // MHQ-858: prompt/response capture, parity with Python's
+    // `_safe_input_messages` / `_extract_output_text`.
+    const inputData = captureInputMessages(params?.messages, params?.system);
+    if (inputData !== undefined) span.input_data = inputData;
+    const outputText = extractAnthropicOutputText(response?.content);
+    if (outputText !== undefined) span.output_data = { content: outputText };
+  } catch {
+    // swallow — telemetry must never break the caller
+  }
+}
+
+/**
+ * Record one llm span in a trace of its own, after the call settled. Used when
+ * the call was made with no trace open: the trace cannot be held open across
+ * the caller's `await` without replacing the SDK's `APIPromise`, so the span
+ * is written once the outcome is known, with the call's real start time.
+ */
+function recordInOwnTrace(
+  agentName: string | undefined,
+  params: AnthropicMessageCreateParams,
+  startedAt: string,
+  startMs: number,
+  fill: (span: SpanData) => void,
+  error: unknown,
+  after?: (span: SpanData) => void,
+): Promise<void> {
+  let failure: unknown;
+  return _runAsync({ agentName }, async (runHandle) => {
+    setActiveFramework("anthropic");
+    const late = startDetachedSpan(spanOptions(params));
+    if (late) {
+      fill(late.span);
+      late.end(error);
+      late.span.started_at = startedAt;
+      late.span.duration_ms = Date.now() - startMs;
+      after?.(late.span);
+    }
+    if (error !== undefined) {
+      failure = error;
+      throw error;
+    }
+    runHandle.setOutcome(true);
+    return null;
+  }).then(
+    () => undefined,
+    (err: unknown) => {
+      if (err !== failure) throw err;
+    },
+  );
+}
+
 function buildPatchedCreate(
   original: (
     params: AnthropicMessageCreateParams,
@@ -405,112 +590,305 @@ function buildPatchedCreate(
   const agentName = options.defaultAgentName;
   const summarizeMode = options.summarize === true;
 
-  return async function patchedCreate(
+  return function patchedCreate(
     this: unknown,
     params: AnthropicMessageCreateParams,
     callOptions?: unknown,
   ): Promise<AnthropicMessageResponse> {
     const inTrace = getActiveTraceState() !== null;
 
-    const work = async (): Promise<AnthropicMessageResponse> => {
-      setActiveFramework("anthropic");
-      const handle = startSpan({
-        name: "anthropic.messages.create",
-        type: "llm",
-        metadata: { model: params?.model, max_tokens: params?.max_tokens },
-      });
-      let response: AnthropicMessageResponse | undefined;
-      try {
-        response = await original.call(this, params, callOptions);
-      } catch (err) {
-        handle?.end(err);
-        throw err;
-      }
+    // MHQ-1415: `create({ stream: true })` resolves to an event stream, not a
+    // Message. Usage arrives in `message_start` / `message_delta`, so the span
+    // is recorded when the stream ends, from the accumulated events.
+    if (params?.stream === true) {
+      return tracedStreamCreate(this, original, params, callOptions, agentName, inTrace);
+    }
 
-      // Recording is best-effort — never let it throw at the caller.
+    const startedAt = nowIso();
+    const startMs = Date.now();
+    setActiveFramework("anthropic");
+    const handle = inTrace ? startSpan(spanOptions(params)) : null;
+    let done = false;
+
+    const emitMemory = (span: SpanData, response?: AnthropicMessageResponse): void => {
+      // MEM-11: emit sibling memory span when summarize mode is enabled.
+      // Sequenced AFTER the LLM span closes so its span_id is final.
+      if (!summarizeMode) return;
       try {
-        if (handle) {
-          const segments = safeExtractSegments(params, response);
-          applyEndUser((params?.metadata as { user_id?: unknown } | undefined)?.user_id);
-          const usage = response?.usage ?? {};
-          const inputTokens =
-            (usage.input_tokens ?? 0) +
-            (usage.cache_creation_input_tokens ?? 0) +
-            (usage.cache_read_input_tokens ?? 0);
-          const outputTokens = usage.output_tokens ?? 0;
-          handle.span.model = response?.model ?? params?.model;
-          if (inputTokens > 0) handle.span.input_tokens = inputTokens;
-          if (outputTokens > 0) handle.span.output_tokens = outputTokens;
-          const cacheWrite = usage.cache_creation_input_tokens ?? 0;
-          const cacheRead = usage.cache_read_input_tokens ?? 0;
-          if (cacheWrite > 0) handle.span.cache_write_tokens = cacheWrite;
-          if (cacheRead > 0) handle.span.cached_input_tokens = cacheRead;
-          if (inputTokens > 0 || outputTokens > 0) {
-            handle.span.total_tokens = inputTokens + outputTokens;
-          }
-          if (
-            handle.span.cost_usd === undefined &&
-            handle.span.model &&
-            (inputTokens > 0 || outputTokens > 0)
-          ) {
-            const cost = calculateCost({
-              inputTokens,
-              outputTokens,
-              model: handle.span.model,
-              cachedInputTokens: cacheRead,
-              cacheWriteTokens: cacheWrite,
-            });
-            if (cost !== undefined) handle.span.cost_usd = cost;
-          }
-          handle.span.context_segments = segments;
-          // MHQ-858: prompt/response capture, parity with Python's
-          // `_safe_input_messages` / `_extract_output_text`.
-          const inputData = captureInputMessages(params?.messages, params?.system);
-          if (inputData !== undefined) handle.span.input_data = inputData;
-          const outputText = extractAnthropicOutputText(response?.content);
-          if (outputText !== undefined) handle.span.output_data = { content: outputText };
-        }
+        emitSummarizeMemorySpan(span, response);
       } catch {
         // swallow — telemetry must never break the caller
       }
-      handle?.end();
-
-      // MEM-11: emit sibling memory span when summarize mode is enabled.
-      // Sequenced AFTER the LLM span closes so its span_id is final.
-      if (summarizeMode && handle) {
-        try {
-          emitSummarizeMemorySpan(handle.span, response);
-        } catch {
-          // swallow — telemetry must never break the caller
-        }
-      }
-      return response;
     };
 
-    if (inTrace) {
-      return work();
-    }
-
-    // No active trace — open a fresh agent span around the call so the
-    // llm span has a parent. We can't return work()'s Promise from inside
-    // _runAsync's callback while preserving the LLM result's typing AND
-    // having the fresh trace own the lifecycle, so we wrap explicitly.
-    let result: AnthropicMessageResponse | undefined;
-    let thrown: unknown;
-    await _runAsync({ agentName }, async (runHandle) => {
-      runHandle.setOutcome(true);
-      try {
-        result = await work();
-      } catch (err) {
-        thrown = err;
-        throw err;
+    const settle = (response: AnthropicMessageResponse | undefined, error: unknown): void => {
+      if (done) return;
+      done = true;
+      if (handle) {
+        if (error === undefined) fillResponseSpan(handle.span, params, response);
+        else handle.span.model = params?.model;
+        handle.end(error);
+        if (error === undefined) emitMemory(handle.span, response);
+        return;
       }
-      return null;
-    });
-    if (thrown !== undefined) throw thrown;
-    // result is set unless work() threw, in which case we already rethrew.
-    return result as AnthropicMessageResponse;
+      if (inTrace) return; // trace closed between call and settle: nothing to attach to
+      void recordInOwnTrace(
+        agentName,
+        params,
+        startedAt,
+        startMs,
+        (span) => {
+          if (error === undefined) fillResponseSpan(span, params, response);
+          else span.model = params?.model;
+        },
+        error,
+        (span) => {
+          if (error === undefined) emitMemory(span, response);
+        },
+      ).catch(() => undefined);
+    };
+
+    let p: Promise<AnthropicMessageResponse>;
+    try {
+      p = original.call(this, params, callOptions);
+    } catch (err) {
+      settle(undefined, err);
+      throw err;
+    }
+    onRejected(p, (err) => settle(undefined, err));
+    return mapKeepingShape(p, (response) => {
+      settle(response, undefined);
+      return response;
+    }) as Promise<AnthropicMessageResponse>;
   };
+}
+
+/* ------------------------------------------------------------------------ */
+/*  Streaming (MHQ-1415): create({ stream: true })                           */
+/* ------------------------------------------------------------------------ */
+
+interface StreamAccumulator {
+  model?: string;
+  inputTokens: number;
+  outputTokens: number;
+  cacheWrite: number;
+  cacheRead: number;
+  text: string[];
+  stopReason?: string;
+}
+
+function numOr(v: unknown, fallback: number): number {
+  return typeof v === "number" && Number.isFinite(v) ? v : fallback;
+}
+
+interface RawStreamEvent {
+  type?: unknown;
+  message?: { model?: unknown; usage?: Record<string, unknown> };
+  usage?: Record<string, unknown>;
+  delta?: { type?: unknown; text?: unknown; stop_reason?: unknown };
+}
+
+/** Fold one raw stream event into the accumulator. Never throws. */
+function accumulateStreamEvent(acc: StreamAccumulator, event: unknown): void {
+  try {
+    if (!event || typeof event !== "object") return;
+    const e = event as RawStreamEvent;
+    if (e.type === "message_start" && e.message) {
+      if (typeof e.message.model === "string") acc.model = e.message.model;
+      const u = e.message.usage ?? {};
+      acc.inputTokens = numOr(u.input_tokens, acc.inputTokens);
+      acc.outputTokens = numOr(u.output_tokens, acc.outputTokens);
+      acc.cacheWrite = numOr(u.cache_creation_input_tokens, acc.cacheWrite);
+      acc.cacheRead = numOr(u.cache_read_input_tokens, acc.cacheRead);
+    } else if (e.type === "message_delta") {
+      // message_delta usage is cumulative; newer API versions also repeat
+      // the input/cache counts here.
+      const u = e.usage ?? {};
+      acc.outputTokens = numOr(u.output_tokens, acc.outputTokens);
+      acc.inputTokens = numOr(u.input_tokens, acc.inputTokens);
+      acc.cacheWrite = numOr(u.cache_creation_input_tokens, acc.cacheWrite);
+      acc.cacheRead = numOr(u.cache_read_input_tokens, acc.cacheRead);
+      if (typeof e.delta?.stop_reason === "string") acc.stopReason = e.delta.stop_reason;
+    } else if (e.type === "content_block_delta" && e.delta?.type === "text_delta") {
+      if (typeof e.delta.text === "string") acc.text.push(e.delta.text);
+    }
+  } catch {
+    // telemetry must never break the caller's stream
+  }
+}
+
+function fillStreamSpan(
+  span: SpanData,
+  acc: StreamAccumulator,
+  params: AnthropicMessageCreateParams,
+  error: unknown,
+): void {
+  span.model = acc.model ?? params?.model;
+  const inputTokens = acc.inputTokens + acc.cacheWrite + acc.cacheRead;
+  if (inputTokens > 0) span.input_tokens = inputTokens;
+  if (acc.outputTokens > 0) span.output_tokens = acc.outputTokens;
+  if (acc.cacheWrite > 0) span.cache_write_tokens = acc.cacheWrite;
+  if (acc.cacheRead > 0) span.cached_input_tokens = acc.cacheRead;
+  if (inputTokens > 0 || acc.outputTokens > 0) {
+    span.total_tokens = inputTokens + acc.outputTokens;
+    if (span.model) {
+      const cost = calculateCost({
+        inputTokens,
+        outputTokens: acc.outputTokens,
+        model: span.model,
+        cachedInputTokens: acc.cacheRead,
+        cacheWriteTokens: acc.cacheWrite,
+      });
+      if (cost !== undefined) span.cost_usd = cost;
+    }
+  }
+  const metadata: Record<string, unknown> = { ...(span.metadata ?? {}), streamed: true };
+  if (error === undefined && acc.stopReason === undefined) {
+    // The caller stopped reading before the final event: output is partial.
+    metadata.stream_incomplete = true;
+  }
+  span.metadata = metadata;
+  const inputData = captureInputMessages(params?.messages, params?.system);
+  if (inputData !== undefined) span.input_data = inputData;
+  if (acc.text.length > 0) span.output_data = { content: acc.text.join("") };
+}
+
+/** Proxy a stream so iterating it feeds `onEvent` and `onFinish` runs once. */
+function wrapEventStream<S extends object>(
+  stream: S,
+  onEvent: (event: unknown) => void,
+  onFinish: (error: unknown) => void,
+): S {
+  const iterFn = (stream as Record<symbol, unknown>)[Symbol.asyncIterator];
+  if (typeof iterFn !== "function") {
+    onFinish(undefined);
+    return stream;
+  }
+  let finished = false;
+  const finish = (error: unknown): void => {
+    if (finished) return;
+    finished = true;
+    try {
+      onFinish(error);
+    } catch {
+      // swallow — telemetry must never break the caller
+    }
+  };
+  return new Proxy(stream, {
+    get(target, prop, receiver) {
+      if (prop === Symbol.asyncIterator) {
+        return function tracedIterator(): AsyncIterator<unknown> {
+          const it = (iterFn as () => AsyncIterator<unknown>).call(target);
+          const wrapped: AsyncIterator<unknown> & AsyncIterable<unknown> = {
+            async next(...args: [] | [unknown]) {
+              let result: IteratorResult<unknown>;
+              try {
+                result = await it.next(...args);
+              } catch (err) {
+                finish(err);
+                throw err;
+              }
+              if (result.done) finish(undefined);
+              else onEvent(result.value);
+              return result;
+            },
+            async return(value?: unknown) {
+              finish(undefined);
+              if (typeof it.return === "function") return it.return(value);
+              return { done: true, value };
+            },
+            async throw(err?: unknown) {
+              finish(err);
+              if (typeof it.throw === "function") return it.throw(err);
+              throw err;
+            },
+            [Symbol.asyncIterator]() {
+              return wrapped;
+            },
+          };
+          return wrapped;
+        };
+      }
+      const value = Reflect.get(target, prop, receiver);
+      if (typeof value === "function") return (value as (...a: unknown[]) => unknown).bind(target);
+      return value;
+    },
+  });
+}
+
+function tracedStreamCreate(
+  self: unknown,
+  original: (
+    params: AnthropicMessageCreateParams,
+    options?: unknown,
+  ) => Promise<AnthropicMessageResponse>,
+  params: AnthropicMessageCreateParams,
+  callOptions: unknown,
+  agentName: string | undefined,
+  inTrace: boolean,
+): Promise<AnthropicMessageResponse> {
+  const startedAt = nowIso();
+  const startMs = Date.now();
+  const acc: StreamAccumulator = {
+    inputTokens: 0,
+    outputTokens: 0,
+    cacheWrite: 0,
+    cacheRead: 0,
+    text: [],
+  };
+  setActiveFramework("anthropic");
+  // In a trace: a detached span (not on the stack, so work done while the
+  // caller reads the stream does not nest under it), parented at call time.
+  const detached = inTrace ? startDetachedSpan(spanOptions(params)) : null;
+  let recorded = false;
+  // A stream read after `run()`'s callback returned (a streamed route) keeps
+  // the trace open until it ends (MHQ-1407).
+  const releaseTrace = detached ? holdTraceOpen() : null;
+
+  const record = (error: unknown): void => {
+    if (recorded) return;
+    recorded = true;
+    if (detached) {
+      fillStreamSpan(detached.span, acc, params, error);
+      detached.end(error);
+      if (error !== undefined) detached.span.exception_type = errorClassName(error);
+      releaseTrace?.();
+      return;
+    }
+    if (inTrace) return;
+    void recordInOwnTrace(
+      agentName,
+      params,
+      startedAt,
+      startMs,
+      (span) => fillStreamSpan(span, acc, params, error),
+      error,
+    ).catch(() => undefined);
+  };
+
+  let p: Promise<AnthropicMessageResponse>;
+  try {
+    p = original.call(self, params, callOptions);
+  } catch (err) {
+    record(err);
+    throw err;
+  }
+  onRejected(p, (err) => record(err));
+  return mapKeepingShape(p, (stream) => {
+    if (!stream || typeof stream !== "object") {
+      record(undefined);
+      return stream;
+    }
+    return wrapEventStream(
+      stream as unknown as object,
+      (event) => accumulateStreamEvent(acc, event),
+      record,
+    ) as unknown as AnthropicMessageResponse;
+  }) as Promise<AnthropicMessageResponse>;
+}
+
+function errorClassName(error: unknown): string {
+  return error instanceof Error ? error.constructor.name || "Error" : typeof error;
 }
 
 /* ------------------------------------------------------------------------ */

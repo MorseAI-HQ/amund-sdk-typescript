@@ -13,6 +13,40 @@ import * as morse from "../src/index";
 import { wrapAnthropic, type AnthropicClientLike } from "../src/anthropic/index";
 import type { BatchTransport } from "../src/_internal/transport";
 
+// WP-8 (2026-10-24): rows ported from the server catalog
+// (apps/api/apps/traces/data/model_pricing.json, fix/wp8-cost-catalog 95400119c).
+describe("WP-8 catalog rows", () => {
+  const rows: Array<[string, number, number, number | undefined]> = [
+    ["gpt-6-astra", 10, 50, 1],
+    ["gpt-5.1-2025-11-13", 1.25, 10, 0.125],
+    ["gpt-5-pro", 15, 120, undefined], // fell back to gpt-5 ($1.25/$10) before
+    ["o3-pro", 20, 80, undefined],
+    ["claude-mythos-5", 10, 50, 1],
+    ["gemini-3.1-pro", 2, 12, 0.2],
+    ["us.amazon.nova-pro-v1:0", 0.8, 3.2, 0.2],
+    ["meta.llama4-scout-17b-instruct-v1:0", 0.17, 0.66, undefined],
+    ["openai/gpt-oss-20b", 0.07, 0.3, undefined],
+  ];
+  it.each(rows)("%s resolves to the catalog price", (model, input, output, cached) => {
+    const p = getModelPricing(model);
+    expect(p, model).toBeDefined();
+    expect(p?.input_per_mtok).toBe(input);
+    expect(p?.output_per_mtok).toBe(output);
+    expect(p?.cached_per_mtok).toBe(cached);
+  });
+
+  it("prices claude-mythos-5 cache writes", () => {
+    expect(
+      calculateCost({
+        inputTokens: 0,
+        outputTokens: 0,
+        model: "claude-mythos-5",
+        cacheWriteTokens: 1_000_000,
+      }),
+    ).toBeCloseTo(12.5);
+  });
+});
+
 describe("getModelPricing", () => {
   it("matches an exact model id", () => {
     const pricing = getModelPricing("claude-sonnet-4-6");

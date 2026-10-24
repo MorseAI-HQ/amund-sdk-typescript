@@ -139,5 +139,231 @@
   "deepseek-chat": {
     "input_per_mtok": 0.14,
     "output_per_mtok": 0.28
+  },
+  "gpt-6-astra": {
+    "input_per_mtok": 10.0,
+    "output_per_mtok": 50.0,
+    "cached_per_mtok": 1.0
+  },
+  "gpt-6.1-sol": {
+    "input_per_mtok": 2.0,
+    "output_per_mtok": 10.0,
+    "cached_per_mtok": 0.1
+  },
+  "gpt-6-sol": {
+    "input_per_mtok": 2.0,
+    "output_per_mtok": 10.0,
+    "cached_per_mtok": 0.2
+  },
+  "gpt-6-luna": {
+    "input_per_mtok": 0.1,
+    "output_per_mtok": 0.5,
+    "cached_per_mtok": 0.01
+  },
+  "gpt-5.6-sol": {
+    "input_per_mtok": 4.0,
+    "output_per_mtok": 20.0,
+    "cached_per_mtok": 0.4
+  },
+  "gpt-5.6-terra": {
+    "input_per_mtok": 2.0,
+    "output_per_mtok": 12.0,
+    "cached_per_mtok": 0.2
+  },
+  "gpt-5.6-luna": {
+    "input_per_mtok": 0.2,
+    "output_per_mtok": 1.2,
+    "cached_per_mtok": 0.02
+  },
+  "gpt-5.5-pro": {
+    "input_per_mtok": 30.0,
+    "output_per_mtok": 180.0
+  },
+  "gpt-5.5": {
+    "input_per_mtok": 5.0,
+    "output_per_mtok": 30.0,
+    "cached_per_mtok": 0.5
+  },
+  "gpt-5.4-pro": {
+    "input_per_mtok": 30.0,
+    "output_per_mtok": 180.0
+  },
+  "gpt-5.2-pro": {
+    "input_per_mtok": 21.0,
+    "output_per_mtok": 168.0
+  },
+  "gpt-5.2": {
+    "input_per_mtok": 1.75,
+    "output_per_mtok": 14.0,
+    "cached_per_mtok": 0.175
+  },
+  "gpt-5.1": {
+    "input_per_mtok": 1.25,
+    "output_per_mtok": 10.0,
+    "cached_per_mtok": 0.125
+  },
+  "gpt-5-pro": {
+    "input_per_mtok": 15.0,
+    "output_per_mtok": 120.0
+  },
+  "o3-pro": {
+    "input_per_mtok": 20.0,
+    "output_per_mtok": 80.0
+  },
+  "o1-pro": {
+    "input_per_mtok": 150.0,
+    "output_per_mtok": 600.0
+  },
+  "gpt-4o-2024-05-13": {
+    "input_per_mtok": 5.0,
+    "output_per_mtok": 15.0
+  },
+  "claude-mythos-5-1": {
+    "input_per_mtok": 10.0,
+    "output_per_mtok": 50.0,
+    "cached_per_mtok": 0.25,
+    "cache_write_per_mtok": 12.5
+  },
+  "claude-mythos-5": {
+    "input_per_mtok": 10.0,
+    "output_per_mtok": 50.0,
+    "cached_per_mtok": 1.0,
+    "cache_write_per_mtok": 12.5
+  },
+  "gemini-4-argon": {
+    "input_per_mtok": 2.0,
+    "output_per_mtok": 10.0,
+    "cached_per_mtok": 0.1
+  },
+  "gemini-3.8-flash": {
+    "input_per_mtok": 0.75,
+    "output_per_mtok": 3.75,
+    "cached_per_mtok": 0.075
+  },
+  "gemini-3.6-flash": {
+    "input_per_mtok": 0.75,
+    "output_per_mtok": 3.75,
+    "cached_per_mtok": 0.075
+  },
+  "gemini-3.5-flash-lite": {
+    "input_per_mtok": 0.3,
+    "output_per_mtok": 2.5,
+    "cached_per_mtok": 0.03
+  },
+  "gemini-3.1-flash-lite": {
+    "input_per_mtok": 0.25,
+    "output_per_mtok": 1.5,
+    "cached_per_mtok": 0.025
+  },
+  "gemini-3.1-pro": {
+    "input_per_mtok": 2.0,
+    "output_per_mtok": 12.0,
+    "cached_per_mtok": 0.2
+  },
+  "gemini-3-flash": {
+    "input_per_mtok": 0.5,
+    "output_per_mtok": 3.0,
+    "cached_per_mtok": 0.05
+  },
+  "nova-micro": {
+    "input_per_mtok": 0.035,
+    "output_per_mtok": 0.14,
+    "cached_per_mtok": 0.0088
+  },
+  "nova-lite": {
+    "input_per_mtok": 0.06,
+    "output_per_mtok": 0.24,
+    "cached_per_mtok": 0.015
+  },
+  "nova-pro": {
+    "input_per_mtok": 0.8,
+    "output_per_mtok": 3.2,
+    "cached_per_mtok": 0.2
+  },
+  "nova-premier": {
+    "input_per_mtok": 2.5,
+    "output_per_mtok": 12.5,
+    "cached_per_mtok": 0.625
+  },
+  "nova-2-lite": {
+    "input_per_mtok": 0.3,
+    "output_per_mtok": 2.5,
+    "cached_per_mtok": 0.075
+  },
+  "nova-2-pro": {
+    "input_per_mtok": 1.25,
+    "output_per_mtok": 10.0
+  },
+  "nova-2-omni": {
+    "input_per_mtok": 0.3,
+    "output_per_mtok": 2.5
+  },
+  "llama3-3-70b": {
+    "input_per_mtok": 0.72,
+    "output_per_mtok": 0.72
+  },
+  "llama3-2-90b": {
+    "input_per_mtok": 0.72,
+    "output_per_mtok": 0.72
+  },
+  "llama3-2-11b": {
+    "input_per_mtok": 0.16,
+    "output_per_mtok": 0.16
+  },
+  "llama3-2-3b": {
+    "input_per_mtok": 0.15,
+    "output_per_mtok": 0.15
+  },
+  "llama3-2-1b": {
+    "input_per_mtok": 0.1,
+    "output_per_mtok": 0.1
+  },
+  "llama3-1-70b": {
+    "input_per_mtok": 0.72,
+    "output_per_mtok": 0.72
+  },
+  "llama3-1-8b": {
+    "input_per_mtok": 0.22,
+    "output_per_mtok": 0.22
+  },
+  "llama3-70b": {
+    "input_per_mtok": 2.65,
+    "output_per_mtok": 3.5
+  },
+  "llama3-8b": {
+    "input_per_mtok": 0.3,
+    "output_per_mtok": 0.6
+  },
+  "llama4-maverick": {
+    "input_per_mtok": 0.24,
+    "output_per_mtok": 0.97
+  },
+  "llama4-scout": {
+    "input_per_mtok": 0.17,
+    "output_per_mtok": 0.66
+  },
+  "mistral-large-3": {
+    "input_per_mtok": 0.5,
+    "output_per_mtok": 1.5
+  },
+  "ministral-14b": {
+    "input_per_mtok": 0.2,
+    "output_per_mtok": 0.2
+  },
+  "ministral-8b": {
+    "input_per_mtok": 0.15,
+    "output_per_mtok": 0.15
+  },
+  "ministral-3b": {
+    "input_per_mtok": 0.1,
+    "output_per_mtok": 0.1
+  },
+  "gpt-oss-120b": {
+    "input_per_mtok": 0.15,
+    "output_per_mtok": 0.6
+  },
+  "gpt-oss-20b": {
+    "input_per_mtok": 0.07,
+    "output_per_mtok": 0.3
   }
 }

@@ -118,6 +118,12 @@ export interface TraceState {
   prompts?: PromptRef[];
   // AID-04: the name passed to `run()` when it differs from the discovered root.
   appName?: string;
+  // MHQ-1407: open holds on this trace (a streamed LLM response handed back to
+  // the framework before it is read). The trace is finalised when the last
+  // hold is released, not when the `run()` callback returns. See `holdTraceOpen`.
+  openHolds?: number;
+  // Set by `endTrace` while it waits for the holds; the last release calls it.
+  onHoldsReleased?: () => void;
 }
 
 type AlsLike<T> = {
@@ -706,13 +712,89 @@ function startTrace(opts: RunOptions): {
   return { state, rootSpan, startMono: nowMonotonic() };
 }
 
+/**
+ * Longest a trace is held open by `holdTraceOpen` after its `run()` callback
+ * returned. A stream nobody reads never ends; past this the trace is sent with
+ * what it has.
+ */
+export const TRACE_HOLD_MAX_MS = 10 * 60 * 1000;
+
+/**
+ * MHQ-1407: keep the active trace open until the returned release is called.
+ *
+ * A streamed route returns the response before the stream is read, so
+ * `run(() => { const r = streamText(...); return r.toUIMessageStreamResponse(); })`
+ * used to close the trace in milliseconds and drop the llm span, its usage and
+ * every span the stream's tools made. Adapters take a hold when a stream starts
+ * and release it when the stream ends; `run()` still returns as soon as its
+ * callback does, and only the trace's finalisation waits (bounded by
+ * `TRACE_HOLD_MAX_MS`). Releasing is synchronous, so a stream fully read inside
+ * the callback ends the trace exactly as before. Returns null when no trace is
+ * active. The release is idempotent and never throws.
+ */
+export function holdTraceOpen(): (() => void) | null {
+  try {
+    const state = getActiveTraceState();
+    if (state === null) return null;
+    state.openHolds = (state.openHolds ?? 0) + 1;
+    let released = false;
+    return () => {
+      if (released) return;
+      released = true;
+      try {
+        state.openHolds = Math.max(0, (state.openHolds ?? 1) - 1);
+        if (state.openHolds === 0 && state.onHoldsReleased) {
+          const resume = state.onHoldsReleased;
+          state.onHoldsReleased = undefined;
+          resume();
+        }
+      } catch (err) {
+        report(err, { fingerprint: "morse.tracing.release_hold" });
+      }
+    };
+  } catch {
+    return null;
+  }
+}
+
 function endTrace(
   state: TraceState,
   rootSpan: SpanData,
   startMono: number,
   threwError: unknown,
 ): void {
-  state.spanStack.pop();
+  if (!state.openHolds) {
+    endTraceNow(state, rootSpan, startMono, threwError);
+    return;
+  }
+  let ended = false;
+  const finish = (): void => {
+    if (ended) return;
+    ended = true;
+    clearTimeout(timer);
+    state.onHoldsReleased = undefined;
+    try {
+      endTraceNow(state, rootSpan, startMono, threwError);
+    } catch (err) {
+      report(err, { fingerprint: "morse.tracing.end_trace_deferred" });
+    }
+  };
+  const timer = setTimeout(finish, TRACE_HOLD_MAX_MS);
+  (timer as { unref?: () => void }).unref?.();
+  state.onHoldsReleased = finish;
+}
+
+function endTraceNow(
+  state: TraceState,
+  rootSpan: SpanData,
+  startMono: number,
+  threwError: unknown,
+): void {
+  // Remove the root itself, not whatever is on top: a span that is still open
+  // (a stream nobody finished reading) must not leave the root on the stack.
+  const rootIdx = state.spanStack.lastIndexOf(rootSpan);
+  if (rootIdx >= 0) state.spanStack.splice(rootIdx, 1);
+  else state.spanStack.pop();
   if (threwError !== undefined) {
     const msg = state.errorMessage ?? errToString(threwError);
     finalizeSpan(rootSpan, startMono, "failed", msg, threwError);
@@ -961,7 +1043,7 @@ export function linkRecord(keyType: string, keyValue: string | number): void {
  * Over OTLP a span carries one reference, so when several are set on the same
  * span the last is exported (the legacy JSON path keeps all).
  */
-export function setPrompt(name: string, version?: number): void {
+export function setPrompt(name: string, version?: number | string): void {
   try {
     const state = getActiveTraceState();
     if (state === null) return;

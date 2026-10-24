@@ -25,7 +25,7 @@
 
 import { absorbErrorsAsync } from "../_internal/errors";
 import { getActiveTraceState, runAsync as _runAsync } from "../_internal/tracing";
-import { emitAgentSpan } from "../_agent-sdk-common/span-emitter";
+import { openAgentScope } from "./agent-scope";
 
 import type { ClaudeSDKClientLike, ClaudeSDKQueryOptions, SDKMessageLike } from "./types";
 
@@ -169,11 +169,8 @@ function buildPatchedQuery(
       // Open the outer agent span BEFORE invoking the original query so the
       // model/prompt are visible to any caller that introspects the span
       // mid-iteration.
-      const handle = emitAgentSpan({
-        adapter: "anthropic-agent-sdk",
-        agentName: defaultAgentName,
-        model,
-      });
+      // MHQ-1416: the trace root is the agent (no second agent span) unless legacy.
+      const handle = openAgentScope({ agentName: defaultAgentName, explicitAgentName, model });
       let iter: AsyncIterable<SDKMessageLike>;
       try {
         const ret = boundOriginal(prompt, callOptions);

@@ -8,8 +8,8 @@ from pathlib import Path
 
 GHSA = "GHSA-86w9-cpqp-85rv"
 EXPIRES = date(
-    2026, 10, 30
-)  # exclusive end; 14 days from 2026-10-16 UTC when prior expired
+    2026, 11, 27
+)  # exclusive end; 28 days from 2026-10-30 UTC when the prior renewal expires
 PATCH = "patches/node-forge@1.4.0.patch"
 SHA256 = "9a9dc718cb1ca29b6c679a8faccebd42f089bf0f6cb313948d79c3371b884236"  # pragma: allowlist secret — public patch digest
 PATCH_HASH = "2rrcoti7slk4yhkia7s4hfdtpe"

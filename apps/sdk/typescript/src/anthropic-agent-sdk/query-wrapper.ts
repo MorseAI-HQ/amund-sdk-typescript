@@ -39,8 +39,9 @@
  * the real `Query`. `tests/agent-sdk/anthropic/query-wrapper.test.ts` asserts
  * that control methods survive, because losing them is invisible otherwise.
  */
+import { setActiveFramework } from "../_internal/active-framework";
 import { adoptThreadId } from "../_internal/tracing";
-import { emitAgentSpan } from "../_agent-sdk-common/span-emitter";
+import { type AgentScope, openAgentScope } from "./agent-scope";
 import { instrumentLlmCalls } from "./llm-instrumentation";
 import { instrumentTools } from "./tool-and-subagent";
 import { iterateInTrace } from "./trace-bridge";
@@ -110,15 +111,18 @@ export function wrapClaudeAgentQuery<Q extends ClaudeAgentQueryFn>(
 
     // The agent span opens on first iteration, not here. A Query that is
     // created and never consumed should not leave a span open forever.
-    let handle: ReturnType<typeof emitAgentSpan> = null;
+    let handle: AgentScope | null = null;
     let opened = false;
 
     async function* withAgentSpan(): AsyncGenerator<SDKMessageLike, void, unknown> {
       if (!opened) {
         opened = true;
-        handle = emitAgentSpan({
-          adapter: "anthropic-agent-sdk",
+        // MHQ-1416: traces from this adapter carried a NULL framework.
+        setActiveFramework("claude-agent-sdk");
+        // MHQ-1416: the trace root is the agent (no second agent span) unless legacy.
+        handle = openAgentScope({
           agentName: options.defaultAgentName ?? "claude-agent-sdk",
+          explicitAgentName: options.defaultAgentName,
           model,
         });
       }
@@ -128,6 +132,18 @@ export function wrapClaudeAgentQuery<Q extends ClaudeAgentQueryFn>(
           // stable across turns of one session — exactly the grouping the
           // dashboard's thread_id expresses.
           adoptThreadId((message as { session_id?: unknown } | undefined)?.session_id);
+          // MHQ-1416: `options.model` is often an alias ("haiku"); the served,
+          // dated model arrives on each assistant message. Record that one.
+          const served = (message as { message?: { model?: unknown } } | undefined)?.message?.model;
+          if (
+            handle &&
+            typeof served === "string" &&
+            served.length > 0 &&
+            handle.span.model !== served
+          ) {
+            handle.span.model = served;
+            if (handle.span.metadata) handle.span.metadata.model = served;
+          }
           yield message;
         }
       } catch (err) {

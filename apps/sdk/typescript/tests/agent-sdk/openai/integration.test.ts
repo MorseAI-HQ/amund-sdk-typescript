@@ -300,7 +300,7 @@ describe("wrapRunnerWithFullInstrumentation — dispose", () => {
   });
 });
 
-// AID-09: this suite pins the pre-0.8 naming (chains as `agent` spans). The default
+// AID-09: this suite pins the pre-0.7 (0.6.0) naming (chains as `agent` spans). The default
 // shape is covered in tests/agent-identity-*.test.ts.
 beforeAll(() => {
   process.env.MORSE_AGENT_IDENTITY = "legacy";

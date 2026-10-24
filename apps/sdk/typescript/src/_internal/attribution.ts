@@ -145,11 +145,37 @@ export function normalizePromptRef(
   const n = name.trim().slice(0, MAX_PROMPT_NAME_LENGTH);
   if (n.length === 0) return null;
   const ref: PromptRef = { name: n };
-  if (typeof version === "number" && Number.isInteger(version) && version >= 1) {
-    ref.version = version;
+  const v = coercePromptVersion(version);
+  if (v !== undefined) ref.version = v;
+  else if (version !== undefined && version !== null) {
+    warnOnce(
+      "prompt_version",
+      "a setPrompt() version that is not a whole number >= 1 was dropped and only the " +
+        'prompt name recorded; pass the registry version number (e.g. 3 or "3")',
+    );
   }
   if (spanId) ref.span_id = spanId;
   return ref;
+}
+
+/**
+ * MHQ-1415: `setPrompt("triage", "3")` used to drop the version silently. A
+ * whole-number string (`"3"`, `"v3"`) is now read as that version; anything
+ * else that is not an integer ≥1 is still dropped (the server keeps integer
+ * versions only), but with a one-time warning.
+ */
+export function coercePromptVersion(version: unknown): number | undefined {
+  if (typeof version === "number") {
+    return Number.isInteger(version) && version >= 1 ? version : undefined;
+  }
+  if (typeof version === "string") {
+    const m = /^v?(\d{1,9})$/i.exec(version.trim());
+    if (m) {
+      const n = Number(m[1]);
+      return n >= 1 ? n : undefined;
+    }
+  }
+  return undefined;
 }
 
 /**

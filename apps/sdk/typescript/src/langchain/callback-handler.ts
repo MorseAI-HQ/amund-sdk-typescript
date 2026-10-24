@@ -237,6 +237,8 @@ export interface TokenUsage {
   outputTokens?: number;
   totalTokens?: number;
   cachedInputTokens?: number;
+  /** Prompt-cache WRITE tokens (Anthropic `cache_creation`), included in `inputTokens`. */
+  cacheWriteTokens?: number;
 }
 
 function numOrUndef(v: unknown): number | undefined {
@@ -269,12 +271,14 @@ export function extractTokenUsage(response: LLMResultLike | null | undefined): T
       const um = msg.usage_metadata;
       if (um && (um.input_tokens !== undefined || um.output_tokens !== undefined)) {
         const details = um.input_token_details ?? {};
-        const cached = details.cache_read ?? details.cache_creation;
+        // MHQ-1414: cache reads and cache writes are priced differently, so a
+        // cache write is never reported as a cached (read) token.
         return {
           inputTokens: numOrUndef(um.input_tokens),
           outputTokens: numOrUndef(um.output_tokens),
           totalTokens: numOrUndef(um.total_tokens),
-          cachedInputTokens: numOrUndef(cached),
+          cachedInputTokens: numOrUndef(details.cache_read),
+          cacheWriteTokens: numOrUndef(details.cache_creation),
         };
       }
       const tokenUsage = msg.response_metadata?.token_usage;
@@ -319,6 +323,7 @@ export function extractTokenUsage(response: LLMResultLike | null | undefined): T
       outputTokens: numOrUndef(usage.output_tokens),
       totalTokens: numOrUndef(usage.total_tokens),
       cachedInputTokens: numOrUndef(usage.cache_read_input_tokens),
+      cacheWriteTokens: numOrUndef(usage.cache_creation_input_tokens),
     };
   }
 
@@ -751,6 +756,9 @@ const _handleLLMEnd = absorbErrorsSync(
             : (usage.inputTokens ?? 0) + (usage.outputTokens ?? 0) || undefined;
         if (usage.cachedInputTokens) {
           handle.span.cached_input_tokens = usage.cachedInputTokens;
+        }
+        if (usage.cacheWriteTokens) {
+          handle.span.cache_write_tokens = usage.cacheWriteTokens;
         }
       }
       // Response model wins over the invocation-param model set in

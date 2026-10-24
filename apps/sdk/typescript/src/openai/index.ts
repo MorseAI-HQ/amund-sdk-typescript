@@ -7,9 +7,12 @@
  * span carrying model, token counts, `cost_usd`, and pre-segmented
  * `context_segments`.
  *
- * Streaming (`stream: true`) is NOT traced on either API: the call returns
- * an async iterable rather than a response with usage, so it passes through
- * with no span (tracked as MHQ-1407).
+ * Streaming (`stream: true`) is traced on both APIs (MHQ-1407): the span is
+ * recorded when the stream ends, from the chunks/events. Chat Completions only
+ * reports usage on a stream with `stream_options: { include_usage: true }`;
+ * without it the span has the model and output but no tokens
+ * (`metadata.usage_unavailable`). `create()` keeps returning the SDK's
+ * `APIPromise`, so `.withResponse()` / `.asResponse()` still work.
  *
  * TS port of `apps/sdk/python/src/morse_ai/adapters/openai.py`'s `wrap()`.
  * This module intentionally covers only the `wrap(client)` recommended
@@ -44,8 +47,15 @@ import { decomposeOpenAiMessages } from "../_agent-sdk-common/context-decomposer
 import { setActiveFramework } from "../_internal/active-framework";
 import { captureInputMessages, extractOpenAiOutputText, truncateText } from "../_internal/llm-io";
 import { calculateCost } from "../_internal/pricing";
-import type { ContextSegment } from "../_internal/spans";
-import { getActiveTraceState, runAsync as _runAsync, startSpan } from "../_internal/tracing";
+import { mapKeepingShape, onRejected, wrapEventStream } from "../_internal/api-promise";
+import { type ContextSegment, nowIso, type SpanData } from "../_internal/spans";
+import {
+  getActiveTraceState,
+  runAsync as _runAsync,
+  holdTraceOpen,
+  startDetachedSpan,
+  startSpan,
+} from "../_internal/tracing";
 import { report } from "../_internal/diagnostics";
 import { applyEndUser } from "../_internal/end-user";
 
@@ -277,6 +287,234 @@ type ApiKind = "chat" | "responses";
 /* eslint-disable @typescript-eslint/no-explicit-any -- chat and responses payloads differ; shapes are read defensively */
 type AnyCreate = (params: any, options?: unknown) => Promise<any>;
 
+/** Usage numbers normalised across the two APIs. */
+interface NormalisedUsage {
+  inputTokens: number;
+  outputTokens: number;
+  cachedTokens: number;
+  reasoningTokens: number;
+  totalTokens: number;
+}
+
+function normaliseUsage(usage: any, isResponses: boolean): NormalisedUsage {
+  const u = usage ?? {};
+  const inputTokens = (isResponses ? u.input_tokens : u.prompt_tokens) ?? 0;
+  const outputTokens = (isResponses ? u.output_tokens : u.completion_tokens) ?? 0;
+  const cachedTokens =
+    (isResponses
+      ? u.input_tokens_details?.cached_tokens
+      : u.prompt_tokens_details?.cached_tokens) ?? 0;
+  const reasoningTokens =
+    (isResponses
+      ? u.output_tokens_details?.reasoning_tokens
+      : u.completion_tokens_details?.reasoning_tokens) ?? 0;
+  const totalTokens =
+    u.total_tokens ?? (inputTokens > 0 || outputTokens > 0 ? inputTokens + outputTokens : 0);
+  return { inputTokens, outputTokens, cachedTokens, reasoningTokens, totalTokens };
+}
+
+/**
+ * Fill an llm span from a response (or a response rebuilt from a stream).
+ * Best-effort, never throws.
+ */
+function fillSpan(
+  span: SpanData,
+  params: any,
+  response: any,
+  isResponses: boolean,
+  usagePresent: boolean,
+): void {
+  try {
+    const messages = isResponses ? responsesMessages(params) : params?.messages;
+    applyEndUser(firstString(params?.user, params?.safety_identifier));
+    if (isResponses) {
+      const facts = responsesThreadFacts(response, params);
+      if (Object.keys(facts).length > 0) span.metadata = { ...span.metadata, ...facts };
+    }
+    const model = response?.model ?? params?.model;
+    span.model = model;
+    if (usagePresent) {
+      const u = normaliseUsage(response?.usage, isResponses);
+      if (u.inputTokens > 0) span.input_tokens = u.inputTokens;
+      if (u.outputTokens > 0) span.output_tokens = u.outputTokens;
+      // MHQ-1236 parity: 0 (not absent) when usage is reported without a cache hit.
+      span.cached_input_tokens = u.cachedTokens;
+      if (u.reasoningTokens > 0) span.reasoning_tokens = u.reasoningTokens;
+      if (u.totalTokens > 0) span.total_tokens = u.totalTokens;
+      if (model && (u.inputTokens > 0 || u.outputTokens > 0)) {
+        const cost = calculateCost({
+          inputTokens: u.inputTokens,
+          outputTokens: u.outputTokens,
+          model,
+          cachedInputTokens: u.cachedTokens,
+        });
+        if (cost !== undefined) span.cost_usd = cost;
+      }
+    }
+    span.context_segments = safeExtractSegments(messages, params?.tools);
+    // MHQ-858: prompt/response capture, parity with the Python adapter.
+    const inputData = captureInputMessages(messages);
+    if (inputData !== undefined) span.input_data = inputData;
+    const outputText = isResponses
+      ? extractResponsesOutputText(response)
+      : extractOpenAiOutputText(response?.choices);
+    if (outputText !== undefined) span.output_data = { content: outputText };
+  } catch (err) {
+    reportSwallowed(err, "morse.openai.fill_span");
+  }
+}
+
+/** A failed request: keep the requested model, no usage (never priced). */
+function fillFailedSpan(span: SpanData, params: any, error: unknown): void {
+  span.model = params?.model;
+  if (error !== undefined) span.exception_type = errorClassName(error);
+}
+
+/**
+ * Record one llm span in a trace of its own, after the call settled. Used when
+ * the call was made with no trace open: the trace cannot be held open across
+ * the caller's `await` without replacing the SDK's `APIPromise`, so the span
+ * is written once the outcome is known, with the call's real start time.
+ */
+function recordInOwnTrace(
+  agentName: string | undefined,
+  spanName: string,
+  params: any,
+  startedAt: string,
+  startMs: number,
+  fill: (span: SpanData) => void,
+  error: unknown,
+): Promise<void> {
+  let failure: unknown;
+  return _runAsync({ agentName: agentName ?? spanName }, async (runHandle) => {
+    setActiveFramework("openai");
+    const late = startDetachedSpan({
+      name: spanName,
+      type: "llm",
+      metadata: { model: params?.model },
+    });
+    if (late) {
+      fill(late.span);
+      late.end(error);
+      late.span.started_at = startedAt;
+      late.span.duration_ms = Date.now() - startMs;
+    }
+    if (error !== undefined) {
+      failure = error;
+      throw error;
+    }
+    runHandle.setOutcome(true);
+    return null;
+  }).then(
+    () => undefined,
+    (err: unknown) => {
+      if (err !== failure) throw err;
+    },
+  );
+}
+
+/* ------------------------------------------------------------------------ */
+/*  Streaming (MHQ-1407): create({ stream: true })                           */
+/* ------------------------------------------------------------------------ */
+
+interface ChatStreamAcc {
+  kind: "chat";
+  chunks: number;
+  model?: string;
+  usage?: any;
+  text: string[];
+  toolCalls: Map<number, { name?: string; args: string[] }>;
+  finishReason?: string;
+}
+
+interface ResponsesStreamAcc {
+  kind: "responses";
+  chunks: number;
+  latest?: any;
+  terminal?: string;
+}
+
+type StreamAcc = ChatStreamAcc | ResponsesStreamAcc;
+
+const RESPONSES_TERMINAL = new Set([
+  "response.completed",
+  "response.incomplete",
+  "response.failed",
+]);
+
+function newAcc(isResponses: boolean): StreamAcc {
+  return isResponses
+    ? { kind: "responses", chunks: 0 }
+    : { kind: "chat", chunks: 0, text: [], toolCalls: new Map() };
+}
+
+/** Fold one chunk/event into the accumulator. Never throws. */
+function accumulate(acc: StreamAcc, event: any): void {
+  try {
+    acc.chunks += 1;
+    if (acc.kind === "responses") {
+      if (event?.response && typeof event.response === "object") acc.latest = event.response;
+      if (typeof event?.type === "string" && RESPONSES_TERMINAL.has(event.type)) {
+        acc.terminal = event.type;
+      }
+      return;
+    }
+    if (typeof event?.model === "string") acc.model = event.model;
+    if (event?.usage) acc.usage = event.usage;
+    for (const choice of event?.choices ?? []) {
+      if ((choice?.index ?? 0) !== 0) continue;
+      if (typeof choice.finish_reason === "string") acc.finishReason = choice.finish_reason;
+      const delta = choice.delta;
+      if (typeof delta?.content === "string" && delta.content) acc.text.push(delta.content);
+      for (const tc of delta?.tool_calls ?? []) {
+        const idx = typeof tc?.index === "number" ? tc.index : 0;
+        const slot = acc.toolCalls.get(idx) ?? { args: [] };
+        if (typeof tc?.function?.name === "string") slot.name = tc.function.name;
+        if (typeof tc?.function?.arguments === "string") slot.args.push(tc.function.arguments);
+        acc.toolCalls.set(idx, slot);
+      }
+    }
+  } catch {
+    // telemetry must never break the caller's stream
+  }
+}
+
+/** The response the stream amounts to, plus stream metadata. */
+function settleAcc(acc: StreamAcc): {
+  response: any;
+  usagePresent: boolean;
+  meta: Record<string, unknown>;
+} {
+  const meta: Record<string, unknown> = { streamed: true };
+  if (acc.kind === "responses") {
+    if (acc.chunks > 0 && acc.terminal === undefined) meta.stream_incomplete = true;
+    if (acc.terminal && acc.terminal !== "response.completed") {
+      meta.response_status = acc.terminal.slice("response.".length);
+    }
+    return { response: acc.latest, usagePresent: Boolean(acc.latest?.usage), meta };
+  }
+  if (acc.usage === undefined) meta.usage_unavailable = true; // no stream_options.include_usage
+  if (acc.chunks > 0 && acc.finishReason === undefined) meta.stream_incomplete = true;
+  const toolCalls = [...acc.toolCalls.entries()]
+    .sort(([a], [b]) => a - b)
+    .map(([, slot]) => ({
+      function: { name: slot.name ?? "tool", arguments: slot.args.join("") || undefined },
+    }));
+  const response = {
+    model: acc.model,
+    usage: acc.usage,
+    choices: [
+      {
+        message: {
+          content: acc.text.join("") || undefined,
+          tool_calls: toolCalls.length > 0 ? toolCalls : undefined,
+        },
+      },
+    ],
+  };
+  return { response, usagePresent: acc.usage !== undefined, meta };
+}
+
 function buildPatchedCreate(
   original: AnyCreate,
   options: WrapOpenAiOptions,
@@ -285,119 +523,100 @@ function buildPatchedCreate(
   const agentName = options.defaultAgentName;
   const isResponses = api === "responses";
   const spanName = isResponses ? "openai.responses.create" : "openai.chat.completions.create";
+  const ownTraceName = isResponses ? (agentName ?? spanName) : agentName;
 
-  return async function patchedCreate(
-    this: unknown,
-    params: any,
-    callOptions?: unknown,
-  ): Promise<any> {
+  // Not `async`: the SDK's `create()` returns an `APIPromise`, and callers use
+  // `.withResponse()` / `.asResponse()` on it. Returning a plain Promise broke
+  // them (the MHQ-1415 Anthropic bug, same shape here).
+  return function patchedCreate(this: unknown, params: any, callOptions?: unknown): Promise<any> {
     const inTrace = getActiveTraceState() !== null;
+    const streaming = params?.stream === true;
+    const startedAt = nowIso();
+    const startMs = Date.now();
+    setActiveFramework("openai");
+    // A stream's span is detached (not on the stack) so work done while the
+    // caller reads the stream does not nest under it; parented at call time.
+    const handle = inTrace
+      ? streaming
+        ? startDetachedSpan({ name: spanName, type: "llm", metadata: { model: params?.model } })
+        : startSpan({ name: spanName, type: "llm", metadata: { model: params?.model } })
+      : null;
+    const acc = streaming ? newAcc(isResponses) : null;
+    // A stream read after `run()`'s callback returned (a streamed route) keeps
+    // the trace open until it ends (MHQ-1407).
+    const releaseTrace = handle && streaming ? holdTraceOpen() : null;
+    let done = false;
 
-    const work = async (): Promise<any> => {
-      setActiveFramework("openai");
-      const handle = startSpan({
-        name: spanName,
-        type: "llm",
-        metadata: { model: params?.model },
-      });
-      let response: any;
-      try {
-        response = await original.call(this, params, callOptions);
-      } catch (err) {
-        // Customer's own API error — mark the span failed, then re-raise
-        // unchanged. Never swallow the caller's real error.
-        handle?.end(err);
-        throw err;
+    const fill = (span: SpanData, response: any, error: unknown): void => {
+      if (error !== undefined && !acc) {
+        fillFailedSpan(span, params, error);
+        return;
       }
-
-      // Recording is best-effort — never let it throw at the caller.
-      try {
-        if (handle) {
-          const messages = isResponses ? responsesMessages(params) : params?.messages;
-          const segments = safeExtractSegments(messages, params?.tools);
-          applyEndUser(firstString(params?.user, params?.safety_identifier));
-          if (isResponses) {
-            const facts = responsesThreadFacts(response, params);
-            if (Object.keys(facts).length > 0) {
-              handle.span.metadata = { ...handle.span.metadata, ...facts };
-            }
-          }
-          const usage = response?.usage ?? {};
-          const inputTokens = (isResponses ? usage.input_tokens : usage.prompt_tokens) ?? 0;
-          const outputTokens = (isResponses ? usage.output_tokens : usage.completion_tokens) ?? 0;
-          const cachedTokens =
-            (isResponses
-              ? usage.input_tokens_details?.cached_tokens
-              : usage.prompt_tokens_details?.cached_tokens) ?? 0;
-          const model = response?.model ?? params?.model;
-
-          handle.span.model = model;
-          if (inputTokens > 0) handle.span.input_tokens = inputTokens;
-          if (outputTokens > 0) handle.span.output_tokens = outputTokens;
-          if (cachedTokens > 0) handle.span.cached_input_tokens = cachedTokens;
-          if (isResponses) {
-            const reasoning = usage.output_tokens_details?.reasoning_tokens ?? 0;
-            if (reasoning > 0) handle.span.reasoning_tokens = reasoning;
-          }
-          const totalTokens =
-            usage.total_tokens ??
-            (inputTokens > 0 || outputTokens > 0 ? inputTokens + outputTokens : 0);
-          if (totalTokens > 0) handle.span.total_tokens = totalTokens;
-
-          if (model && (inputTokens > 0 || outputTokens > 0)) {
-            const cost = calculateCost({
-              inputTokens,
-              outputTokens,
-              model,
-              cachedInputTokens: cachedTokens,
-            });
-            if (cost !== undefined) handle.span.cost_usd = cost;
-          }
-          handle.span.context_segments = segments;
-          // MHQ-858: prompt/response capture, parity with the Python
-          // adapter's input_data/output_data.
-          const inputData = captureInputMessages(messages);
-          if (inputData !== undefined) handle.span.input_data = inputData;
-          const outputText = isResponses
-            ? extractResponsesOutputText(response)
-            : extractOpenAiOutputText(response?.choices);
-          if (outputText !== undefined) handle.span.output_data = { content: outputText };
-        }
-      } catch (err) {
-        // swallow — telemetry must never break the caller
-        reportSwallowed(err, "morse.openai.stream_wrap");
+      if (acc) {
+        const settled = settleAcc(acc);
+        fillSpan(span, params, settled.response, isResponses, settled.usagePresent);
+        if (settled.response === undefined) span.model = params?.model;
+        span.metadata = { ...(span.metadata ?? {}), ...settled.meta };
+        if (error !== undefined) span.exception_type = errorClassName(error);
+        return;
       }
-      handle?.end();
-      return response;
+      fillSpan(span, params, response, isResponses, response?.usage !== undefined);
     };
 
-    if (inTrace) {
-      return work();
-    }
+    const settle = (response: any, error: unknown): void => {
+      if (done) return;
+      done = true;
+      if (handle) {
+        fill(handle.span, response, error);
+        handle.end(error);
+        releaseTrace?.();
+        return;
+      }
+      if (inTrace) return; // trace closed between call and settle: nothing to attach to
+      void recordInOwnTrace(
+        ownTraceName,
+        spanName,
+        params,
+        startedAt,
+        startMs,
+        (span) => fill(span, response, error),
+        error,
+      ).catch(() => undefined);
+    };
 
-    // No active trace — open a fresh agent span around the call so the
-    // llm span has a parent. Mirrors `wrapAnthropic`'s pattern: we can't
-    // return `work()`'s Promise from inside `_runAsync`'s callback while
-    // preserving typing AND having the fresh trace own the lifecycle, so
-    // we wrap explicitly.
-    let result: unknown;
-    let thrown: unknown;
-    await _runAsync(
-      { agentName: isResponses ? (agentName ?? spanName) : agentName },
-      async (runHandle) => {
-        runHandle.setOutcome(true);
-        try {
-          result = await work();
-        } catch (err) {
-          thrown = err;
-          throw err;
-        }
-        return null;
-      },
-    );
-    if (thrown !== undefined) throw thrown;
-    return result;
+    let p: Promise<any>;
+    try {
+      p = original.call(this, params, callOptions);
+    } catch (err) {
+      settle(undefined, err);
+      throw err;
+    }
+    const out = mapKeepingShape(p, (response: any) => {
+      if (!acc) {
+        settle(response, undefined);
+        return response;
+      }
+      if (!response || typeof response !== "object") {
+        settle(undefined, undefined);
+        return response;
+      }
+      return wrapEventStream(
+        response as object,
+        (event) => accumulate(acc, event),
+        (error) => settle(undefined, error),
+      );
+    }) as Promise<any>;
+    // Observe the promise we hand back, not `p`: openai's `_thenUnwrap` builds
+    // a second APIPromise over the same response, and each one parses the body
+    // on its first `.then`, so a `.then` on `p` too read the body twice
+    // ("Body is unusable"). The returned one memoises its parse.
+    onRejected(out, (err) => settle(undefined, err));
+    return out;
   };
+}
+
+function errorClassName(error: unknown): string {
+  return error instanceof Error ? error.constructor.name || "Error" : typeof error;
 }
 function firstString(...values: unknown[]): string | undefined {
   for (const v of values) if (typeof v === "string" && v !== "") return v;

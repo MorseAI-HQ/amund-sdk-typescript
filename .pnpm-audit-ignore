@@ -60,35 +60,18 @@ GHSA-5p2g-fcmc-qvqq
 # pnpm patch hash: 2rrcoti7slk4yhkia7s4hfdtpe.
 # Enforced by scripts/security/check_forge_audit_exception.py and required
 # frontend regression suite; missing/changed patch or unpatched resolution fails.
-# Valid for14 days; FAILS from2026-10-16 (exclusive end, no auto-renewal).
+# Renewed 2026-10-16 (to 2026-10-30) and again 2026-10-24 (to 2026-11-27) because
+# upstream has shipped no fixed release (npm latest is 1.4.0) and the remaining
+# consumers cannot drop it: @expo/cli and @expo/code-signing-certificates
+# require node-forge; only the selfsigned path has a forge-free major.
+# FAILS from 2026-11-27 (exclusive end, no auto-renewal).
 # Remove sooner when an official fixed release replaces the patch, or any guard
 # regression/consumer failure invalidates the mitigation. Remove both ignore
 # entries with the patch and rerun audit/regressions.
-# Decision: memory/decisions/2026-10-02-forge-expiring-audit-exception.md
-# expires: 2026-10-16
+# Decision: memory/decisions/2026-10-02-forge-expiring-audit-exception.md,
+# memory/decisions/2026-10-24-forge-audit-exception-second-renewal.md
+# expires: 2026-11-26
 GHSA-86w9-cpqp-85rv
-
-# ---------------------------------------------------------------------------
-# braces — stack-exhaustion denial of service (GHSA-vfj7-8cjw-p6xm, high).
-# NO UPSTREAM FIX EXISTS: 3.0.3 (2024-05-21) is the latest release and the
-# advisory covers <=3.0.3, so an override cannot clear it.
-#
-# Only production path (pnpm why braces --prod -r, 2026-10-03):
-#   apps/docs -> @scalar/api-reference -> @scalar/api-client|components
-#     -> @headlessui/tailwindcss -> tailwindcss 3.4 (peer)
-#     -> chokidar / micromatch / fast-glob -> braces
-#
-# ACCEPT rationale: the exploit needs an attacker-controlled brace pattern fed
-# to braces' expansion. On this path braces only expands tailwind's content
-# globs and chokidar's watch paths, both from our own build configuration,
-# and only at build/dev time. No request path, upload or user input in any
-# Morse app reaches braces.
-# Owner: Claude Code (technical/security); accountable risk owner: founder.
-# Remove when braces ships a fixed release (or @scalar drops tailwind 3 from
-# its runtime deps), then rerun pnpm audit --prod.
-# Decision: memory/decisions/2026-10-03-braces-audit-exception.md
-# expires: 2026-11-02
-GHSA-vfj7-8cjw-p6xm
 
 # ---------------------------------------------------------------------------
 # zod 3 — memory exhaustion on an oversized array (GHSA-mrhx-c7xc-m3w5, high).

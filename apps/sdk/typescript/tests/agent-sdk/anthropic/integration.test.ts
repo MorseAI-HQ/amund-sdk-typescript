@@ -12,7 +12,7 @@
  * dispose semantics.
  */
 
-import { beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
 import { wrapClaudeAgentSDKWithFullInstrumentation } from "../../../src/anthropic-agent-sdk";
 import type { SDKMessageLike } from "../../../src/anthropic-agent-sdk/types";
@@ -78,6 +78,20 @@ beforeEach(() => {
 /* ------------------------------------------------------------------------ */
 
 describe("wrapClaudeAgentSDKWithFullInstrumentation — full span tree", () => {
+  // These pin the legacy shape (MORSE_AGENT_IDENTITY=legacy): an extra
+  // `anthropic-agent-sdk.agent` span under the trace root. The default (agent
+  // identity v2, MHQ-1416) records the root as the only agent span; see
+  // "identity v2" below.
+  let savedIdentity: string | undefined;
+  beforeEach(() => {
+    savedIdentity = process.env.MORSE_AGENT_IDENTITY;
+    process.env.MORSE_AGENT_IDENTITY = "legacy";
+  });
+  afterEach(() => {
+    if (savedIdentity === undefined) delete process.env.MORSE_AGENT_IDENTITY;
+    else process.env.MORSE_AGENT_IDENTITY = savedIdentity;
+  });
+
   it("emits the expected 9-span tree for a non-trivial agent loop", async () => {
     const raw = buildNonTrivialClient();
     const { client } = wrapClaudeAgentSDKWithFullInstrumentation(raw);

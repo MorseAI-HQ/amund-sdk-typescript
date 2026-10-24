@@ -68,7 +68,7 @@ export function isFrameworkNodeName(name: unknown): boolean {
   return FRAMEWORK_NODE_NAMES.has(bare) || /^\[(langchain|langgraph)\]$/i.test(n);
 }
 
-/** `MORSE_AGENT_IDENTITY=legacy` restores pre-0.8 naming (AID-09). Read per call. */
+/** `MORSE_AGENT_IDENTITY=legacy` restores pre-0.7 (0.6.0) naming (AID-09). Read per call. */
 export function isLegacyIdentity(env: NodeJS.ProcessEnv = process.env): boolean {
   return clean(env?.MORSE_AGENT_IDENTITY)?.toLowerCase() === "legacy";
 }

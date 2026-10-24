@@ -610,11 +610,12 @@ export function linkRecord(keyType: string, keyValue: string | number): void {
 /**
  * Record which prompt the active trace used (ATTR-04). Inside a `span()` the
  * reference is attached to that span, otherwise to the trace. `version` is
- * optional and must be an integer >= 1 (anything else is dropped, keeping the
- * name). At most 20 references per trace. No-op outside an active trace.
+ * optional: an integer >= 1, or a whole-number string such as `"3"` / `"v3"`
+ * (anything else is dropped with a one-time warning, keeping the name). At most
+ * 20 references per trace. No-op outside an active trace.
  * Mirrors Python's `morse_ai.set_prompt()`.
  */
-export function setPrompt(name: string, version?: number): void {
+export function setPrompt(name: string, version?: number | string): void {
   _setPrompt(name, version);
 }
 

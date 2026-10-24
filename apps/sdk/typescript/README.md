@@ -99,8 +99,9 @@ await morse.runTraced(
 - `agentVersion` (on `init()` and per run, up to 128 characters) declares which
   release of the agent ran.
 - `setPrompt(name, version?)` records which prompt a run used. Inside a
-  `span()` it attaches to that span, otherwise to the trace. `version` must be an
-  integer of at least 1; teams that keep prompts in code can omit it and rely on
+  `span()` it attaches to that span, otherwise to the trace. `version` is an
+  integer of at least 1 or a whole-number string (`"3"`, `"v3"`); anything else is
+  dropped with a one-time warning. Teams that keep prompts in code can omit it and rely on
   `agentVersion` or the git revision. At most 20 references per trace. OTLP
   carries one prompt reference per span, so if you set several inside one span only
   the last is exported — use one `span()` per prompt.
@@ -203,14 +204,25 @@ const client = wrapOpenAI(new OpenAI());
 ```
 
 `responses.create` is traced as `openai.responses.create` (0.7.0+). Streaming
-(`stream: true`) is not traced on either API yet (MHQ-1407).
+(`stream: true`) is traced on both APIs: the span is recorded when the stream ends.
+Chat Completions only reports usage on a stream with
+`stream_options: { include_usage: true }`; without it the span has the model and
+output but no tokens (`metadata.usage_unavailable`). `create()` still returns the
+SDK's `APIPromise`, so `.withResponse()` / `.asResponse()` work on a wrapped
+client. The `.stream()` helpers are not traced (they call the unwrapped client).
+
+A stream returned from `morse.run()` and read afterwards (a streamed HTTP route)
+keeps its trace open until the stream ends, for this adapter, `wrapAnthropic` and
+the Vercel AI adapter.
 
 ### `@morsehq-dev/sdk/anthropic-agent-sdk` — Claude Agent SDK
 
 Wrap the package's top-level `query` and call the returned function in its
-place. Emits an outer **agent** span, per-call **llm** spans (with
-`context_segments`), **tool** spans, **subagent.spawn** spans for Task-tool
-fan-out, and **hook** spans.
+place. The trace's root span is the agent (it carries the served model; pass
+`defaultAgentName` to name it, and a surrounding `run("app")` becomes the app
+label); under it come per-call **llm** spans (with `context_segments`), **tool**
+spans, **subagent.spawn** spans for Task-tool fan-out, and **hook** spans.
+`MORSE_AGENT_IDENTITY=legacy` restores the extra `anthropic-agent-sdk.agent` span.
 
 ```ts
 import { query } from "@anthropic-ai/claude-agent-sdk";
@@ -282,8 +294,11 @@ await morse.run({ agentName: "my-agent" }, async () => {
 
 ### `@morsehq-dev/sdk/vercel-ai` — Vercel AI SDK
 
-One `agent` span per top-level `streamText` / `generateText` /
-`generateObject` invocation. **Not** zero-config auto-detected — `ai`'s
+One `llm` span per top-level `streamText` / `generateText` /
+`generateObject` invocation (in a trace of its own when no `run()` is open),
+with tokens and cost, plus a `tool` span per tool result. A streamed route can
+return `result.toUIMessageStreamResponse()` from inside `morse.run()`: the trace
+stays open until the stream ends. **Not** zero-config auto-detected — `ai`'s
 named exports are non-configurable getters on its module namespace (it
 ships pure ESM), so there is nothing a monkey-patch can reassign, unlike
 `@anthropic-ai/sdk`'s `Messages.prototype.create`. Resolve traced
@@ -363,7 +378,7 @@ backend `SpanType` enum gains native variants.
 ## Fetching hosted prompts
 
 ```ts
-import * as morse from "@morsehq/sdk";
+import * as morse from "@morsehq-dev/sdk";
 
 const prompt = await morse.getPrompt("triage"); // label "production"
 await morse.getPrompt("triage", { version: 3 }); // or pin a version

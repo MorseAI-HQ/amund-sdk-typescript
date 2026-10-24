@@ -305,6 +305,43 @@ function resolveEnabled(
   return config.enabledPatterns;
 }
 
+// MHQ-1412: identifiers are not PII. A UUID or a long hex id (trace/span ids,
+// vector-store document ids) often contains a 10+ digit run, which the phone
+// and card patterns carved out of the middle (`bc41d39b-...-0c[REDACTED:phone]`),
+// corrupting ids that exist to be joined on. Id-shaped tokens are set aside
+// while the digit-run patterns run and restored afterwards. A hex id must
+// contain at least one letter, so an all-digit run (a card number) is never
+// shielded; API-key/JWT/secret patterns always see the full text. Mirrors
+// `apps/sdk/python/src/morse_ai/_internal/redaction.py` and the server.
+const ID_SHIELDED_PATTERNS: ReadonlySet<string> = new Set([
+  "credit_card",
+  "phone_us",
+  "phone_e164",
+  "ssn_us",
+]);
+const ID_TOKEN = new RegExp(
+  "(?<![\\w@.])(?:" +
+    "[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}" +
+    "|(?=[0-9a-fA-F]*[a-fA-F])(?=[0-9a-fA-F]*[0-9])[0-9a-fA-F]{16,64}" +
+    ")(?![0-9A-Za-z])(?![\\w.+\\-]*@)(?!\\.[A-Za-z]{2,})",
+  "g",
+);
+const ID_PLACEHOLDER_RE = /\uE000morse-id-(\d+)\uE000/g;
+
+function shieldIds(s: string, out: string[]): string {
+  if (s.includes("\uE000")) return s;
+  ID_TOKEN.lastIndex = 0;
+  return s.replace(ID_TOKEN, (m) => {
+    out.push(m);
+    return `\uE000morse-id-${out.length - 1}\uE000`;
+  });
+}
+
+function unshieldIds(s: string, ids: readonly string[]): string {
+  ID_PLACEHOLDER_RE.lastIndex = 0;
+  return s.replace(ID_PLACEHOLDER_RE, (_m, i: string) => ids[Number(i)] ?? _m);
+}
+
 /**
  * Core redactor: walk patterns in canonical order, replace matches.
  *
@@ -334,11 +371,15 @@ export function redactString(
     // Reset `lastIndex` defensively (shared global regex state).
     re.lastIndex = 0;
     const replacement = `[REDACTED:${SHORT_KEYS[key]}]`;
+    // Only the digit-run patterns are kept off identifiers (MHQ-1412).
+    const protectedIds: string[] = [];
+    let text = ID_SHIELDED_PATTERNS.has(key) ? shieldIds(out, protectedIds) : out;
     if (key === "credit_card") {
-      out = out.replace(re, (m) => (luhnValid(m) ? replacement : m));
+      text = text.replace(re, (m) => (luhnValid(m) ? replacement : m));
     } else {
-      out = out.replace(re, replacement);
+      text = text.replace(re, replacement);
     }
+    out = protectedIds.length > 0 ? unshieldIds(text, protectedIds) : text;
   }
 
   // Custom patterns last.

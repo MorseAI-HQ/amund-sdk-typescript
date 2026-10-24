@@ -12,7 +12,7 @@
  *   - handles the two-mode `instrumentClaudeAgentSDK` installer correctly.
  */
 
-import { beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
 import {
   instrumentClaudeAgentSDK,
@@ -24,7 +24,7 @@ import type {
   ClaudeSDKQueryOptions,
   SDKMessageLike,
 } from "../../../src/anthropic-agent-sdk/types";
-import { _resetForTesting, getLastTrace } from "../../../src/_internal/tracing";
+import { _resetForTesting, getLastTrace, runAsync } from "../../../src/_internal/tracing";
 
 import { FakeClaudeSDKClient, happyPathClient } from "./fixtures/fake-claude-agent-sdk";
 
@@ -99,6 +99,20 @@ describe("wrapClaudeAgentSDK — surface", () => {
 /* ------------------------------------------------------------------------ */
 
 describe("wrapClaudeAgentSDK — outer agent span", () => {
+  // These pin the legacy shape (MORSE_AGENT_IDENTITY=legacy): an extra
+  // `anthropic-agent-sdk.agent` span under the trace root. The default (agent
+  // identity v2, MHQ-1416) records the root as the only agent span; see
+  // "identity v2" below.
+  let savedIdentity: string | undefined;
+  beforeEach(() => {
+    savedIdentity = process.env.MORSE_AGENT_IDENTITY;
+    process.env.MORSE_AGENT_IDENTITY = "legacy";
+  });
+  afterEach(() => {
+    if (savedIdentity === undefined) delete process.env.MORSE_AGENT_IDENTITY;
+    else process.env.MORSE_AGENT_IDENTITY = savedIdentity;
+  });
+
   it("opens exactly one `type=agent` span tagged with the adapter + default agent_name", async () => {
     const wrapped = wrapClaudeAgentSDK(happyPathClient());
     const { spans } = await drainAndGetSpans(wrapped.query("hi"));
@@ -167,8 +181,10 @@ describe("wrapClaudeAgentSDK — event forwarding", () => {
   it("closes the agent span with `completed` status on successful drain", async () => {
     const wrapped = wrapClaudeAgentSDK(happyPathClient());
     const { spans } = await drainAndGetSpans(wrapped.query("hi"));
-    const emitted = spans.find((s) => s.name === "anthropic-agent-sdk.agent");
-    expect(emitted!.status).toBe("completed");
+    // MHQ-1416: the trace root is the agent span.
+    const agents = spans.filter((s) => s.type === "agent");
+    expect(agents).toHaveLength(1);
+    expect(agents[0]!.status).toBe("completed");
   });
 });
 
@@ -177,6 +193,20 @@ describe("wrapClaudeAgentSDK — event forwarding", () => {
 /* ------------------------------------------------------------------------ */
 
 describe("wrapClaudeAgentSDK — errors", () => {
+  // These pin the legacy shape (MORSE_AGENT_IDENTITY=legacy): an extra
+  // `anthropic-agent-sdk.agent` span under the trace root. The default (agent
+  // identity v2, MHQ-1416) records the root as the only agent span; see
+  // "identity v2" below.
+  let savedIdentity: string | undefined;
+  beforeEach(() => {
+    savedIdentity = process.env.MORSE_AGENT_IDENTITY;
+    process.env.MORSE_AGENT_IDENTITY = "legacy";
+  });
+  afterEach(() => {
+    if (savedIdentity === undefined) delete process.env.MORSE_AGENT_IDENTITY;
+    else process.env.MORSE_AGENT_IDENTITY = savedIdentity;
+  });
+
   it("rethrows mid-iteration errors and closes the agent span with `failed` status", async () => {
     class ExplodingClient implements ClaudeSDKClientLike {
       async *query(
@@ -238,5 +268,61 @@ describe("instrumentClaudeAgentSDK", () => {
     expect(Boolean(await instrumentClaudeAgentSDK({} as unknown as ClaudeSDKClientLike))).toBe(
       false,
     );
+  });
+});
+
+/* ------------------------------------------------------------------------ */
+/*  identity v2 (MHQ-1416): the trace root is the agent                      */
+/* ------------------------------------------------------------------------ */
+
+describe("wrapClaudeAgentSDK — identity v2 (MHQ-1416)", () => {
+  it("records one agent span (the root) carrying the model, outside run()", async () => {
+    // @spec: MHQ-1416
+    const wrapped = wrapClaudeAgentSDK(happyPathClient(), { defaultModel: "claude-opus-4-7" });
+    const { spans } = await drainAndGetSpans(wrapped.query("hi"));
+    const agents = spans.filter((s) => s.type === "agent");
+    expect(agents).toHaveLength(1);
+    expect(agents[0]!.model).toBe("claude-opus-4-7");
+    expect(spans.some((s) => s.name === "anthropic-agent-sdk.agent")).toBe(false);
+  });
+
+  it("under run('app') keeps one agent: the adapter's name, with the run name as the app label", async () => {
+    // @spec: MHQ-1416
+    const wrapped = wrapClaudeAgentSDK(happyPathClient(), {
+      defaultAgentName: "research-agent",
+      defaultModel: "claude-opus-4-7",
+    });
+    await runAsync({ agentName: "my-app" }, async () => {
+      for await (const _ of wrapped.query("hi")) void _;
+    });
+    const last = getLastTrace() as {
+      trace: Record<string, unknown>;
+      spans: WireSpan[];
+    } | null;
+    const agents = (last?.spans ?? []).filter((s) => s.type === "agent");
+    // Before: the run's root agent plus an `anthropic-agent-sdk.agent` child.
+    expect(agents).toHaveLength(1);
+    expect(last?.trace.agent).toBe("research-agent");
+    expect((last?.trace.metadata as Record<string, unknown> | undefined)?.morse_app).toBe("my-app");
+  });
+
+  it("a mid-iteration error still propagates and fails the trace root", async () => {
+    // @spec: MHQ-1416
+    class ExplodingClient implements ClaudeSDKClientLike {
+      async *query(_prompt: string | unknown): AsyncIterable<SDKMessageLike> {
+        void _prompt;
+        yield { type: "message_start", message: { id: "msg_0" } };
+        throw new Error("simulated upstream failure");
+      }
+    }
+    const wrapped = wrapClaudeAgentSDK(new ExplodingClient());
+    await expect(drainAndGetSpans(wrapped.query("hi"))).rejects.toThrow(
+      "simulated upstream failure",
+    );
+    await new Promise((r) => setTimeout(r, 0));
+    const spans = (getLastTrace()?.spans as WireSpan[] | undefined) ?? [];
+    const agents = spans.filter((s) => s.type === "agent");
+    expect(agents).toHaveLength(1);
+    expect(agents[0]!.status).toBe("failed");
   });
 });

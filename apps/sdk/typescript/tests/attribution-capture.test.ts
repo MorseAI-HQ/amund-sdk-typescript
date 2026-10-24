@@ -291,7 +291,7 @@ describe("setPrompt()", () => {
       morse.setPrompt("p1", 0);
       morse.setPrompt("p2", 1.5);
       morse.setPrompt("p3", -2);
-      morse.setPrompt("p4", "3" as unknown as number);
+      morse.setPrompt("p4", "latest");
       return null;
     });
     expect(lastTrace().trace.prompts).toEqual([
@@ -300,6 +300,26 @@ describe("setPrompt()", () => {
       { name: "p3" },
       { name: "p4" },
     ]);
+  });
+
+  // @spec: ATTR-04, MHQ-1415
+  it("reads a whole-number string version instead of dropping it", async () => {
+    initSdk();
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    await morse.runTraced({ agentName: "a" }, async () => {
+      morse.setPrompt("p1", "3");
+      morse.setPrompt("p2", "v12");
+      morse.setPrompt("p3", "2026-10-01");
+      return null;
+    });
+    expect(lastTrace().trace.prompts).toEqual([
+      { name: "p1", version: 3 },
+      { name: "p2", version: 12 },
+      { name: "p3" },
+    ]);
+    // The unreadable one is not silent any more.
+    expect(warn.mock.calls.some((c) => String(c[0]).includes("setPrompt() version"))).toBe(true);
+    warn.mockRestore();
   });
 
   // @spec: ATTR-04

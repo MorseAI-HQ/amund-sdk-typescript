@@ -374,11 +374,13 @@ def main() -> int:
             print(f"  - {p}")
         return 1
 
+    # No early return when the pip list is empty: the pnpm half below must
+    # still run. (WP-1, 2026-10-24: the early `return 0` silently skipped the
+    # pnpm expiry check, so the forge entry sat past its date unflagged.)
     if not entries:
-        print("OK — .pip-audit-ignore has no suppressions.")
-        return 0
-
-    print(f".pip-audit-ignore: {len(entries)} suppression(s)")
+        print(".pip-audit-ignore has no suppressions.")
+    else:
+        print(f".pip-audit-ignore: {len(entries)} suppression(s)")
     failures: list[str] = []
     today = date.today()
 
@@ -400,7 +402,7 @@ def main() -> int:
     # --- staleness --------------------------------------------------------
     if args.no_stale:
         print("\n(staleness check skipped — --no-stale)")
-    else:
+    elif entries:
         reported, err = currently_reported()
         if err:
             # Do NOT pass silently: an unrunnable audit is exactly the state in

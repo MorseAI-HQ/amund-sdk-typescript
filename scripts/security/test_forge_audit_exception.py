@@ -31,8 +31,8 @@ class ExceptionGuardTests(unittest.TestCase):
         self.assertEqual(self.check(), [])
 
     def test_expires_on_exclusive_end_date(self):
-        self.assertEqual(self.check(date(2026, 10, 29)), [])
-        self.assertTrue(self.check(date(2026, 10, 30)))
+        self.assertEqual(self.check(date(2026, 11, 26)), [])
+        self.assertTrue(self.check(date(2026, 11, 27)))
 
     def test_missing_or_changed_patch_fails(self):
         patch = self.root / PATCH

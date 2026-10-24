@@ -474,3 +474,35 @@ describe("parity corpus", () => {
     });
   }
 });
+
+// MHQ-1412 — identifiers are not PII (dogfood 2026-10-18, groups A/D/F).
+describe("identifiers survive the digit-run patterns", () => {
+  const config = buildRedactionConfig();
+  const ids = [
+    '{"id": "bc41d39b-d298-4de5-83ba-0c4576313225"}',
+    '{"duplicate_of_span_id": "40128888-8888-1881-286c-7f355e8c7903"}',
+    "trace_id=50df6d43791e4443b23f7f4576313225",
+    "span 4c4155551234abcd",
+  ];
+  for (const text of ids) {
+    it(`keeps ${text}`, () => {
+      expect(redactString(text, config)).toBe(text);
+    });
+  }
+
+  const pii: Array<[string, string]> = [
+    [
+      "call 415-555-1234 re 2d16e332-1935-4a18-8568-ddf9431a1c3c",
+      "call [REDACTED:phone] re 2d16e332-1935-4a18-8568-ddf9431a1c3c",
+    ],
+    ["card 4111111111111111", "card [REDACTED:credit_card]"],
+    ["ssn 123-45-6789", "ssn [REDACTED:ssn]"],
+    ["deadbeefdeadbeef12@example.com", "[REDACTED:email]"],
+    ["ghp_1234567890abcdef1234567890abcdef1234", "[REDACTED:api_key]"], // pragma: allowlist secret
+  ];
+  for (const [input, expected] of pii) {
+    it(`still redacts ${input}`, () => {
+      expect(redactString(input, config)).toBe(expected);
+    });
+  }
+});

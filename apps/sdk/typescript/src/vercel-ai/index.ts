@@ -50,7 +50,12 @@
  * the decomposer expects (see `toolsRecordToArray` below).
  */
 
-import { getActiveTraceState, runAsync as _runAsync } from "../_internal/tracing";
+import {
+  getActiveTraceState,
+  holdTraceOpen,
+  runAsync as _runAsync,
+  startDetachedSpan,
+} from "../_internal/tracing";
 import { calculateCost } from "../_internal/pricing";
 import { injectTraceparent } from "../propagation";
 import { decomposeOpenAiMessages } from "../_agent-sdk-common/context-decomposer";
@@ -257,9 +262,18 @@ function applyOutput(handle: FinalizeHandle, text: unknown, object?: unknown): v
 /**
  * Wrap `streamText`. Vercel's `streamText` returns synchronously with
  * a result object whose properties are streams / promises (`textStream`,
- * `text`, `usage`, `finishReason`, etc.). We start the agent span when
- * the function is called and finalize it when `result.usage` (or one of
- * its terminal promises) resolves.
+ * `text`, `usage`, `finishReason`, etc.). We start the llm span when
+ * the function is called and finalize it when `result.usage` (and `text`)
+ * resolve.
+ *
+ * MHQ-1407: the trace stays open until that finalisation. Without an
+ * enclosing trace the wrapper opens one and closes it only after the llm span
+ * ended (it used to close it as soon as `usage` resolved, before the span's own
+ * finalisation ran, so on ai@7 the trace was sent with the agent span alone).
+ * Inside `run()` the stream's completion is registered with `holdTraceOpen`,
+ * so a route that returns `result.toUIMessageStreamResponse()` keeps its trace
+ * (and the spans the stream's tools make) until the stream is done. A stream
+ * that fails marks the auto-opened trace failed with `success: false`.
  */
 function wrapStreamText(
   original: (...args: unknown[]) => unknown,
@@ -275,7 +289,7 @@ function wrapStreamText(
     const callArgs = (args[0] ?? {}) as CallArgs;
     const model = modelLabel(callArgs);
 
-    if (inTrace) {
+    const openLlmSpan = (): FinalizeHandle | null => {
       const handle = emitLlmSpan({
         adapter: ADAPTER,
         model: model ?? "unknown",
@@ -286,9 +300,15 @@ function wrapStreamText(
         const contextSegments = contextSegmentsFor(callArgs);
         if (contextSegments.length > 0) handle.span.context_segments = contextSegments;
       }
+      return handle;
+    };
+
+    if (inTrace) {
+      const handle = openLlmSpan();
       try {
         const result = original(...args);
-        attachStreamingFinalize(result, handle);
+        const release = holdTraceOpen();
+        void attachStreamingFinalize(result, handle).then(() => release?.());
         return result;
       } catch (err) {
         handle?.end(err);
@@ -296,32 +316,31 @@ function wrapStreamText(
       }
     }
 
-    // No active trace — wrap in a fresh agent span.
+    // No active trace — wrap in a fresh agent span. The callback runs
+    // synchronously up to its first `await`, so `result` / `syncError` are set
+    // before `_runAsync` returns.
     let result: unknown;
+    let syncError: unknown;
+    let threw = false;
     void _runAsync({ agentName }, async (runHandle) => {
-      runHandle.setOutcome(true);
-      const handle = emitLlmSpan({
-        adapter: ADAPTER,
-        model: model ?? "unknown",
-        attributes: { max_steps: callArgs.maxSteps ?? 1 },
-        inputData: inputDataFor(callArgs),
-      });
-      if (handle !== null) {
-        const contextSegments = contextSegmentsFor(callArgs);
-        if (contextSegments.length > 0) handle.span.context_segments = contextSegments;
-      }
+      const handle = openLlmSpan();
       try {
         result = original(...args);
-        attachStreamingFinalize(result, handle);
-        // Wait for completion (best-effort) so the agent span ends after
-        // the LLM span — without consuming the user's stream.
-        await waitForStreamCompletion(result);
       } catch (err) {
         handle?.end(err);
+        threw = true;
+        syncError = err;
         throw err;
       }
+      const streamError = await attachStreamingFinalize(result, handle);
+      if (streamError !== undefined) {
+        runHandle.setOutcome(false);
+        throw streamError;
+      }
+      runHandle.setOutcome(true);
       return null;
-    });
+    }).catch(() => undefined);
+    if (threw) throw syncError;
     return result;
   };
 }
@@ -329,6 +348,7 @@ function wrapStreamText(
 interface FinalizeHandle {
   span: {
     model?: string;
+    context_segments?: unknown;
     input_tokens?: number;
     output_tokens?: number;
     total_tokens?: number;
@@ -372,52 +392,111 @@ function applyUsage(handle: FinalizeHandle, usage: unknown): void {
   }
 }
 
-function attachStreamingFinalize(result: unknown, handle: FinalizeHandle | null): void {
-  if (!handle) return;
+/**
+ * Finalize the llm span when the stream's `usage` (and `text`) resolve.
+ * Resolves (never rejects) once the span has ended, with the stream's error
+ * if it failed. Also records one `tool` span per tool result in `steps`.
+ */
+function attachStreamingFinalize(result: unknown, handle: FinalizeHandle | null): Promise<unknown> {
   if (!result || typeof result !== "object") {
-    handle.end();
-    return;
+    handle?.end();
+    return Promise.resolve(undefined);
   }
   const r = result as Record<string, unknown>;
   // The Vercel AI SDK exposes a `usage` Promise that resolves with the
-  // token counts at the end of the stream. If unavailable, fall back to
-  // a `finalize` Promise we wait on.
+  // token counts at the end of the stream (ai@7: `totalUsage`).
   const usagePromise = r.usage;
-  if (usagePromise && typeof (usagePromise as Promise<unknown>).then === "function") {
-    // `text` resolves alongside `usage` at stream end; a rejected `text`
-    // must not fail the span — the customer surfaces that themselves.
-    const textPromise =
-      r.text && typeof (r.text as Promise<unknown>).then === "function"
-        ? (r.text as Promise<unknown>).catch(() => undefined)
-        : Promise.resolve(undefined);
-    void Promise.all([usagePromise as Promise<unknown>, textPromise])
-      .then(([usage, text]) => {
-        applyUsage(handle, usage);
-        applyOutput(handle, text);
-        handle.end();
-      })
-      .catch((err) => handle.end(err));
-    return;
+  if (!usagePromise || typeof (usagePromise as Promise<unknown>).then !== "function") {
+    // No usage — best effort: end the span immediately. The customer
+    // may consume the stream afterward; that's fine.
+    handle?.end();
+    return Promise.resolve(undefined);
   }
-  // No usage — best effort: end the span immediately. The customer
-  // may consume the stream afterward; that's fine.
-  handle.end();
+  if (!handle) {
+    return (usagePromise as Promise<unknown>).then(
+      () => undefined,
+      (err: unknown) => err,
+    );
+  }
+  // `text` resolves alongside `usage` at stream end; a rejected `text`
+  // must not fail the span — the customer surfaces that themselves. Read each
+  // getter ONCE: on ai@7 every `result.text` access builds a new promise chain,
+  // and one we only inspected (never `.catch`ed) became an unhandled rejection
+  // when the stream failed.
+  const textPromise = caughtOrUndefined(r.text);
+  const stepsPromise = caughtOrUndefined(r.steps);
+  return Promise.all([usagePromise as Promise<unknown>, textPromise, stepsPromise]).then(
+    ([usage, text, steps]) => {
+      applyUsage(handle, usage);
+      applyOutput(handle, text);
+      emitToolSpans(steps);
+      handle.end();
+      return undefined;
+    },
+    (err: unknown) => {
+      handle.end(err);
+      return err;
+    },
+  );
 }
 
-async function waitForStreamCompletion(result: unknown): Promise<void> {
-  if (!result || typeof result !== "object") return;
-  const r = result as Record<string, unknown>;
-  const candidates = ["usage", "finishReason", "text"];
-  for (const key of candidates) {
-    const v = r[key];
-    if (v && typeof (v as Promise<unknown>).then === "function") {
-      try {
-        await v;
-      } catch {
-        // swallow — the customer will surface the error via their own consumption
+function caughtOrUndefined(value: unknown): Promise<unknown> {
+  if (value && typeof (value as Promise<unknown>).then === "function") {
+    return Promise.resolve(value as Promise<unknown>).catch(() => undefined);
+  }
+  return Promise.resolve(undefined);
+}
+
+interface StepToolResult {
+  toolName?: unknown;
+  toolCallId?: unknown;
+  input?: unknown;
+  args?: unknown;
+  output?: unknown;
+  result?: unknown;
+}
+
+/**
+ * One `tool` span per tool result the run's steps report. The AI SDK runs the
+ * tools inside the stream, so per-tool timing is not observable from here: the
+ * spans carry the tool's name, input and output with `metadata.timing =
+ * "unknown"`. Best-effort, never throws.
+ */
+function emitToolSpans(steps: unknown): void {
+  try {
+    if (!Array.isArray(steps)) return;
+    for (const step of steps) {
+      const results = (step as { toolResults?: unknown })?.toolResults;
+      if (!Array.isArray(results)) continue;
+      for (const raw of results as StepToolResult[]) {
+        const name = typeof raw?.toolName === "string" ? raw.toolName : "tool";
+        const span = startDetachedSpan({
+          name,
+          type: "tool",
+          metadata: {
+            adapter: ADAPTER,
+            timing: "unknown",
+            ...(typeof raw?.toolCallId === "string" ? { tool_call_id: raw.toolCallId } : {}),
+          },
+        });
+        if (!span) return;
+        const input = raw?.input ?? raw?.args;
+        const output = raw?.output ?? raw?.result;
+        if (input !== undefined) span.span.input_data = { arguments: safeJson(input) };
+        if (output !== undefined) span.span.output_data = { content: safeJson(output) };
+        span.end();
       }
-      return;
     }
+  } catch {
+    // telemetry must never break the caller
+  }
+}
+
+function safeJson(value: unknown): string {
+  try {
+    return truncateText(typeof value === "string" ? value : JSON.stringify(value));
+  } catch {
+    return "";
   }
 }
 

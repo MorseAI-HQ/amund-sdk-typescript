@@ -252,7 +252,7 @@ export class MorseTraceProcessor {
         return;
       }
       if (span.error) {
-        safeEnd(handle, new Error(String(span.error)));
+        safeEnd(handle, agentsSpanError(span.error));
         return;
       }
       safeEnd(handle);
@@ -542,6 +542,35 @@ function safeEnd(handle: SpanHandle, err?: unknown): void {
     /* never propagate */
     reportSwallowed(err, "morse.openai_agents.trace_processor");
   }
+}
+
+/**
+ * MHQ-1411: `@openai/agents` reports a span failure as a plain
+ * `{ message, data }` object, so `String(span.error)` stored "[object Object]".
+ * Keep the message, and the error class when the SDK put one in `data`.
+ */
+export function agentsSpanError(raw: unknown): Error {
+  if (raw instanceof Error) return raw;
+  if (raw && typeof raw === "object") {
+    const r = raw as { message?: unknown; data?: Record<string, unknown> };
+    let message = typeof r.message === "string" && r.message.length > 0 ? r.message : "";
+    const detail = r.data?.error ?? r.data?.message;
+    if (typeof detail === "string" && detail.length > 0 && !message.includes(detail)) {
+      message = message ? `${message}: ${detail}` : detail;
+    }
+    if (!message) {
+      try {
+        message = JSON.stringify(raw);
+      } catch {
+        message = "openai-agents span error";
+      }
+    }
+    const err = new Error(message);
+    const name = r.data?.name ?? r.data?.type;
+    if (typeof name === "string" && /^[A-Za-z_$][\w$]*$/.test(name)) err.name = name;
+    return err;
+  }
+  return new Error(String(raw));
 }
 
 /**
