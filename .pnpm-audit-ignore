@@ -89,3 +89,25 @@ GHSA-86w9-cpqp-85rv
 # Decision: memory/decisions/2026-10-03-braces-audit-exception.md
 # expires: 2026-11-02
 GHSA-vfj7-8cjw-p6xm
+
+# ---------------------------------------------------------------------------
+# zod 3 — memory exhaustion on an oversized array (GHSA-mrhx-c7xc-m3w5, high).
+# The fix (4.6.6) exists only on the 4.x line; zod 3 has no patched release.
+# zod 4 is overridden to >=4.6.6 in package.json, so only zod 3.25.76 remains.
+#
+# zod 3 production paths (pnpm why zod@3.25.76 -r --prod, 2026-10-24):
+#   apps/web, apps/mobile -> @morsehq/validation -> zod 3
+#   apps/web (direct), apps/docs -> nextra -> zod 3
+#   @morsehq/sdk -> @anthropic-ai/sdk | openai -> zod (peer)
+#
+# ACCEPT rationale: the exploit needs an attacker-sent large array parsed by a
+# z.array() schema. No zod 3 schema in this repo has an array, set, record or
+# tuple (git grep over apps/web/src and packages/validation/src, 2026-10-24).
+# The only server-side use is the profile/password server actions, whose
+# schemas are flat string objects. Nextra uses zod on its own build config.
+# Owner: Claude Code (technical/security); accountable risk owner: founder.
+# Remove when apps/web and packages/validation move to zod 4 (>=4.6.6), and
+# re-judge before then if any zod 3 schema gains an array on a server path.
+# Decision: memory/decisions/2026-10-24-zod3-audit-exception.md
+# expires: 2026-11-23
+GHSA-mrhx-c7xc-m3w5

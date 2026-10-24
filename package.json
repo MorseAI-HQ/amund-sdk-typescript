@@ -19,7 +19,8 @@
         "GHSA-w3rx-r6r6-pgpr",
         "GHSA-5p2g-fcmc-qvqq",
         "GHSA-86w9-cpqp-85rv",
-        "GHSA-vfj7-8cjw-p6xm"
+        "GHSA-vfj7-8cjw-p6xm",
+        "GHSA-mrhx-c7xc-m3w5"
       ]
     },
     "overrides": {
@@ -29,7 +30,7 @@
       "nanoid": ">=3.3.17",
       "@eslint/eslintrc>js-yaml": "5.4.1",
       "picomatch": ">=4.0.4",
-      "undici": "^7.29.1",
+      "undici": "^7.30.1",
       "vite": "7.3.6",
       "ws": ">=8.20.1",
       "esbuild@<=0.24.2": ">=0.25.0",
@@ -117,6 +118,7 @@
       "sharp@<0.35.0": ">=0.35.0",
       "brace-expansion@>=4.0.0 <5.0.11": ">=5.0.11",
       "undici@>=7.0.0 <7.29.1": ">=7.29.1 <8",
+      "zod@>=4.0.0 <4.6.6": ">=4.6.6 <5",
       "js-yaml@>=4.0.0 <4.3.2": ">=4.3.2 <5",
       "browserslist@<4.28.7": "4.28.7",
       "mermaid@>=11.0.0-alpha.1 <11.16.1": "11.16.1",
