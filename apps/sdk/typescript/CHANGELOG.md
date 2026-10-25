@@ -16,6 +16,20 @@ because they are released in lockstep. Expect the numbers to diverge.
 `@morsehq/sdk` is only the pnpm workspace id and is rewritten by the release workflow). The release
 goes out as `0.7.0-rc.1` first (SDK_PUBLISHING.md §1.1).
 
+### Fixed — client-side redaction matches the server (WP-12)
+
+- **Provider keys the server already redacts are now redacted in the process too.** The default
+  `api_key_prefixed` pattern gains GitHub fine-grained tokens (`github_pat_`), Stripe restricted
+  keys (`rk_live_` / `rk_test_`), Stripe webhook secrets (`whsec_`) and Resend keys
+  (`re_<id>_<secret>`, which must contain a digit and an uppercase letter so snake_case identifiers
+  such as `re_compile_pattern_cache` are left alone). `sk-ant-` and `sk-proj-` keys were already
+  covered by `sk-`.
+- **Deeply nested payloads fail closed.** The walk limit rises from 10 to 64 (the ingest limit),
+  and a node nested deeper is replaced with `[REDACTED:depth]` instead of being sent unredacted.
+- No public API change. A shared table of sample strings
+  (`apps/sdk/shared-fixtures/redaction_provider_keys.json`) is asserted byte-for-byte by the server,
+  this SDK and the Python SDK.
+
 ### Fixed — launch verification (2026-10-24)
 
 - **Anthropic streaming is traced** (MHQ-1415). `messages.create({ stream: true })` records model,

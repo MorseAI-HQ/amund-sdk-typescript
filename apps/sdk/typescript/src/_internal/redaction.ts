@@ -108,6 +108,15 @@ const PATTERNS: Record<string, RegExp> = {
     "\\b(?:" +
       "sk-[A-Za-z0-9_-]{20,}" +
       "|sk_(?:live|test)_[A-Za-z0-9]{20,}" +
+      // WP-12 parity with the server: Stripe restricted keys and webhook
+      // secrets, GitHub fine-grained PATs and Resend keys (`re_<id>_<secret>`,
+      // which must carry a digit and an uppercase letter so snake_case
+      // identifiers never match). `sk-ant-` / `sk-proj-` are covered by `sk-`.
+      "|rk_(?:live|test)_[A-Za-z0-9]{20,}" +
+      "|whsec_[A-Za-z0-9]{24,}" +
+      "|github_pat_[A-Za-z0-9_]{30,}" +
+      "|re_(?=[A-Za-z0-9_]{24,})(?=[A-Za-z0-9_]*\\d)(?=[A-Za-z0-9_]*[A-Z])" +
+      "[A-Za-z0-9]+(?:_[A-Za-z0-9]+)?" +
       "|(?:mhq|av)_(?:pk_)?[\\s\\S]{0,48}_[A-Fa-f0-9]{64}" +
       "|mhq_[A-Za-z0-9]{20,}" +
       "|av_[A-Za-z0-9]{20,}" +
@@ -395,13 +404,22 @@ export function redactString(
 /*  JSON walker                                                              */
 /* ------------------------------------------------------------------------ */
 
-const MAX_DEPTH = 10;
+/**
+ * Maximum nesting depth walked. Matches the server
+ * (`apps.core.redaction.services.MAX_JSON_DEPTH`) and the ingest limit: a
+ * top-level value is depth 0 and a string inside 64 nested containers is depth
+ * 64, which is still walked.
+ */
+export const MAX_DEPTH = 64;
+/** Replaces a node nested deeper than `MAX_DEPTH` (same marker as the server). */
+export const DEPTH_MARKER = "[REDACTED:depth]";
 
 /**
  * Recursively redact string leaves inside an arbitrary JSON-like value.
  * Booleans, numbers, nulls, undefined are passed through untouched.
  * Recursion is bounded at `MAX_DEPTH` to defend against pathological
- * payloads — beyond that, sub-trees are returned as-is.
+ * payloads — anything nested deeper becomes `DEPTH_MARKER` (fail closed, like
+ * the server) instead of being passed through unredacted.
  *
  * Arrays return new arrays; plain objects return new shallow-cloned
  * objects; non-plain objects (Date, Map, etc.) are returned as-is so we
@@ -409,10 +427,10 @@ const MAX_DEPTH = 10;
  */
 export function redactValue(value: unknown, config: RedactionConfig, depth = 0): unknown {
   if (!config.enabled) return value;
+  if (depth > MAX_DEPTH) return DEPTH_MARKER;
   if (value === null || value === undefined) return value;
   if (typeof value === "string") return redactString(value, config);
   if (typeof value === "number" || typeof value === "boolean") return value;
-  if (depth >= MAX_DEPTH) return value;
 
   if (Array.isArray(value)) {
     return value.map((item) => redactValue(item, config, depth + 1));

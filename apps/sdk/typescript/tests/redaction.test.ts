@@ -24,6 +24,8 @@ import {
   PATTERN_ORDER,
   redactString,
   redactValue,
+  DEPTH_MARKER,
+  MAX_DEPTH,
 } from "../src/_internal/redaction";
 import { type BatchTransport } from "../src/_internal/transport";
 
@@ -347,25 +349,35 @@ describe("redactValue — JSON walker", () => {
     });
   });
 
-  it("bounds recursion depth at 10", () => {
+  it("walks to depth 64 and replaces anything deeper (server parity)", () => {
     // @spec: PHASE-6F-G02
-    // Build a 12-deep nest holding an email at the bottom.
-    type Nest = { next?: Nest; leaf?: string };
-    const root: Nest = {};
-    let cur: Nest = root;
-    for (let i = 0; i < 11; i++) {
-      cur.next = {};
-      cur = cur.next;
-    }
-    cur.leaf = "ping jane@example.com";
+    const nest = (leaf: unknown, containers: number): unknown => {
+      let deep: unknown = leaf;
+      for (let i = 0; i < containers; i++) deep = { x: deep };
+      return deep;
+    };
+    const leafOf = (v: unknown): unknown => {
+      let cur = v;
+      while (typeof cur === "object" && cur !== null) cur = (cur as { x: unknown }).x;
+      return cur;
+    };
+    expect(MAX_DEPTH).toBe(64);
+    const email = "jane@example.com";
+    expect(leafOf(redactValue(nest(email, 64), config))).toBe("[REDACTED:email]");
+    expect(leafOf(redactValue(nest(email, 65), config))).toBe(DEPTH_MARKER);
+    expect(DEPTH_MARKER).toBe("[REDACTED:depth]");
+    // Non-string scalars past the limit are replaced too, like the server.
+    expect(leafOf(redactValue(nest(7, 65), config))).toBe(DEPTH_MARKER);
+    expect(leafOf(redactValue(nest(7, 64), config))).toBe(7);
+  });
 
-    const out = redactValue(root, config) as Nest;
-    // Walk down — at depth 10 the leaf should remain unredacted.
-    let walker: Nest = out;
-    for (let i = 0; i < 11; i++) {
-      walker = walker.next as Nest;
-    }
-    expect(walker.leaf).toBe("ping jane@example.com");
+  it("applies the depth limit through arrays", () => {
+    // @spec: PHASE-6F-G02
+    let deep: unknown = "jane@example.com";
+    for (let i = 0; i < 65; i++) deep = [deep];
+    let out = redactValue(deep, config) as unknown[];
+    for (let i = 0; i < 64; i++) out = out[0] as unknown[];
+    expect(out).toEqual([DEPTH_MARKER]);
   });
 
   it("returns input unchanged when redaction is disabled", () => {
@@ -505,4 +517,34 @@ describe("identifiers survive the digit-run patterns", () => {
       expect(redactString(input, config)).toBe(expected);
     });
   }
+});
+
+/* ------------------------------------------------------------------------ */
+/*  WP-12 provider-key parity table, shared with the Python SDK + the server  */
+/* ------------------------------------------------------------------------ */
+
+const PROVIDER_KEYS_PATH = resolve(here, "../../shared-fixtures/redaction_provider_keys.json");
+
+interface ProviderKeyRow {
+  id: string;
+  input: string;
+  expected_output: string;
+}
+
+const providerKeyRows: ProviderKeyRow[] = (
+  JSON.parse(readFileSync(PROVIDER_KEYS_PATH, "utf-8")) as { rows: ProviderKeyRow[] }
+).rows;
+
+describe("provider-key parity table", () => {
+  it("has positive and negative rows", () => {
+    // @spec: PHASE-6F-G02
+    expect(providerKeyRows.some((r) => r.input !== r.expected_output)).toBe(true);
+    expect(providerKeyRows.some((r) => r.input === r.expected_output)).toBe(true);
+  });
+
+  it.each(providerKeyRows.map((r) => [r.id, r] as const))("%s", (_id, row) => {
+    // @spec: PHASE-6F-G02
+    const cfg = buildRedactionConfig();
+    expect(redactString(row.input, cfg)).toBe(row.expected_output);
+  });
 });

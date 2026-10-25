@@ -170,3 +170,51 @@ condition = "AND"
 regexTarget = "secret"
 paths = ["^scripts/check-inline-credentials\\.py$"]
 regexes = ["^h7Kd93ntQm2z$"]
+
+[[allowlists]]
+description = "Owner-reviewed synthetic fixture or code identifier"
+targetRules = ["github-pat"]
+condition = "AND"
+regexTarget = "secret"
+paths = ["^apps/sdk/shared\\-fixtures/redaction_provider_keys\\.json$"]
+regexes = ["^ghp_Zx9Qw8Er7Ty6Ui5Op4As3Df2Gh1JkLzXcVbN$"] # pragma: allowlist secret (reviewed synthetic fixture values only)
+
+[[allowlists]]
+description = "Owner-reviewed synthetic fixture or code identifier"
+targetRules = ["stripe-access-token"]
+condition = "AND"
+regexTarget = "secret"
+paths = ["^apps/sdk/shared\\-fixtures/redaction_provider_keys\\.json$"]
+regexes = ["^sk_live_51Zx9Qw8Er7Ty6Ui5Op4As3Df2Gh1JkL$"] # pragma: allowlist secret (reviewed synthetic fixture values only)
+
+[[allowlists]]
+description = "Owner-reviewed synthetic fixture or code identifier"
+targetRules = ["stripe-access-token"]
+condition = "AND"
+regexTarget = "secret"
+paths = ["^apps/sdk/shared\\-fixtures/redaction_provider_keys\\.json$"]
+regexes = ["^sk_test_51Zx9Qw8Er7Ty6Ui5Op4As3Df2Gh1JkL$"] # pragma: allowlist secret (reviewed synthetic fixture values only)
+
+[[allowlists]]
+description = "Owner-reviewed synthetic fixture or code identifier"
+targetRules = ["stripe-access-token"]
+condition = "AND"
+regexTarget = "secret"
+paths = ["^apps/sdk/shared\\-fixtures/redaction_provider_keys\\.json$"]
+regexes = ["^rk_live_51Zx9Qw8Er7Ty6Ui5Op4As3Df2Gh1JkL$"] # pragma: allowlist secret (reviewed synthetic fixture values only)
+
+[[allowlists]]
+description = "Owner-reviewed synthetic fixture or code identifier"
+targetRules = ["stripe-access-token"]
+condition = "AND"
+regexTarget = "secret"
+paths = ["^apps/sdk/shared\\-fixtures/redaction_provider_keys\\.json$"]
+regexes = ["^rk_test_51Zx9Qw8Er7Ty6Ui5Op4As3Df2Gh1JkL$"] # pragma: allowlist secret (reviewed synthetic fixture values only)
+
+[[allowlists]]
+description = "Owner-reviewed synthetic fixture or code identifier"
+targetRules = ["stripe-access-token"]
+condition = "AND"
+regexTarget = "secret"
+paths = ["^apps/sdk/shared\\-fixtures/redaction_provider_keys\\.json$"]
+regexes = ["^rk_live_Zx9Qw8Er7Ty6Ui5Op4A$"] # pragma: allowlist secret (reviewed synthetic fixture values only)

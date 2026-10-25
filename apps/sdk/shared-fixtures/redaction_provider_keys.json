@@ -1,0 +1,157 @@
+{
+  "_comment": "Provider-key parity table (WP-12). Every value is fabricated to the provider's shape. expected_output is the server's default redact_string() output; the server, the Python SDK and the TypeScript SDK must all produce it. Regenerate by running apps.core.redaction.redact_string over each input; do not hand-edit.",
+  "max_depth": 64,
+  "depth_marker": "[REDACTED:depth]",
+  "rows": [
+    {
+      "id": "anthropic",
+      "input": "sk-ant-api03-Zx9Qw8Er7Ty6Ui5Op4As3Df2Gh1JkLzXcVbNm0Qw-AbCdEfAA",
+      "expected_output": "[REDACTED:api_key]"
+    },
+    {
+      "id": "openai-project",
+      "input": "sk-proj-Zx9Qw8Er7Ty6Ui5Op4As3Df2Gh1JkLzXcVbNm0Qw",
+      "expected_output": "[REDACTED:api_key]"
+    },
+    {
+      "id": "openai-legacy",
+      "input": "sk-Zx9Qw8Er7Ty6Ui5Op4As3Df2Gh1JkLzXcVbNm0Qw",
+      "expected_output": "[REDACTED:api_key]"
+    },
+    {
+      "id": "github-fine-grained",
+      "input": "github_pat_11ABCDEFG0Zx9Qw8Er7Ty6_Zx9Qw8Er7Ty6Ui5Op4As3Df2Gh1JkLzXcVbNm0QwJkLzXcVbNm",
+      "expected_output": "[REDACTED:api_key]"
+    },
+    {
+      "id": "github-fine-grained-min-30",
+      "input": "github_pat_Zx9Qw8Er7Ty6Ui5Op4As3Df2Gh1JkL",
+      "expected_output": "[REDACTED:api_key]"
+    },
+    {
+      "id": "github-classic",
+      "input": "ghp_Zx9Qw8Er7Ty6Ui5Op4As3Df2Gh1JkLzXcVbN",
+      "expected_output": "[REDACTED:api_key]"
+    },
+    {
+      "id": "stripe-secret-live",
+      "input": "sk_live_51Zx9Qw8Er7Ty6Ui5Op4As3Df2Gh1JkL",
+      "expected_output": "[REDACTED:api_key]"
+    },
+    {
+      "id": "stripe-secret-test",
+      "input": "sk_test_51Zx9Qw8Er7Ty6Ui5Op4As3Df2Gh1JkL",
+      "expected_output": "[REDACTED:api_key]"
+    },
+    {
+      "id": "stripe-restricted-live",
+      "input": "rk_live_51Zx9Qw8Er7Ty6Ui5Op4As3Df2Gh1JkL",
+      "expected_output": "[REDACTED:api_key]"
+    },
+    {
+      "id": "stripe-restricted-test",
+      "input": "rk_test_51Zx9Qw8Er7Ty6Ui5Op4As3Df2Gh1JkL",
+      "expected_output": "[REDACTED:api_key]"
+    },
+    {
+      "id": "stripe-webhook",
+      "input": "whsec_Zx9Qw8Er7Ty6Ui5Op4As3Df2Gh1JkLzX",
+      "expected_output": "[REDACTED:api_key]"
+    },
+    {
+      "id": "stripe-webhook-min-24",
+      "input": "whsec_Zx9Qw8Er7Ty6Ui5Op4As3Df2",
+      "expected_output": "[REDACTED:api_key]"
+    },
+    {
+      "id": "resend",
+      "input": "re_Zx9Qw8Er_7Ty6Ui5Op4As3Df2Gh1JkLzXc",
+      "expected_output": "[REDACTED:api_key]"
+    },
+    {
+      "id": "resend-single-segment",
+      "input": "re_Zx9Qw8Er7Ty6Ui5Op4As3Df2Gh1JkLz",
+      "expected_output": "[REDACTED:api_key]"
+    },
+    {
+      "id": "aws-access-key",
+      "input": "AKIAZX9QW8ER7TY6UI5O",
+      "expected_output": "[REDACTED:api_key]"
+    },
+    {
+      "id": "slack-bot",
+      "input": "xoxb-1234567890-abcdefghij",
+      "expected_output": "[REDACTED:api_key]"
+    },
+    {
+      "id": "in-sentence",
+      "input": "config loaded with key re_Zx9Qw8Er_7Ty6Ui5Op4As3Df2Gh1JkLzXc ok",
+      "expected_output": "config loaded with key [REDACTED:api_key] ok"
+    },
+    {
+      "id": "two-keys",
+      "input": "a rk_live_51Zx9Qw8Er7Ty6Ui5Op4As3Df2Gh1JkL b whsec_Zx9Qw8Er7Ty6Ui5Op4As3Df2Gh1JkL c",
+      "expected_output": "a [REDACTED:api_key] b [REDACTED:api_key] c"
+    },
+    {
+      "id": "neg-resend-snake-identifier",
+      "input": "re_compile_pattern_cache_for_tokens",
+      "expected_output": "re_compile_pattern_cache_for_tokens"
+    },
+    {
+      "id": "neg-resend-digit-no-upper",
+      "input": "re_validate_customer_email_address_v2",
+      "expected_output": "re_validate_customer_email_address_v2"
+    },
+    {
+      "id": "neg-resend-upper-no-digit",
+      "input": "re_Validate_Customer_Email_Address",
+      "expected_output": "re_Validate_Customer_Email_Address"
+    },
+    {
+      "id": "neg-github-pat-prefix-prose",
+      "input": "the github_pat_ prefix is documented",
+      "expected_output": "the github_pat_ prefix is documented"
+    },
+    {
+      "id": "neg-github-pat-too-short",
+      "input": "github_pat_Zx9Qw8Er7Ty6Ui5Op4As3Df2Gh1Jk",
+      "expected_output": "github_pat_Zx9Qw8Er7Ty6Ui5Op4As3Df2Gh1Jk"
+    },
+    {
+      "id": "neg-rk-short",
+      "input": "rk_live_short",
+      "expected_output": "rk_live_short"
+    },
+    {
+      "id": "neg-rk-19-chars",
+      "input": "rk_live_Zx9Qw8Er7Ty6Ui5Op4A",
+      "expected_output": "rk_live_Zx9Qw8Er7Ty6Ui5Op4A"
+    },
+    {
+      "id": "neg-whsec-23-chars",
+      "input": "whsec_Zx9Qw8Er7Ty6Ui5Op4As3Df",
+      "expected_output": "whsec_Zx9Qw8Er7Ty6Ui5Op4As3Df"
+    },
+    {
+      "id": "neg-sk-short",
+      "input": "sk-short",
+      "expected_output": "sk-short"
+    },
+    {
+      "id": "neg-uppercase-prefix",
+      "input": "SK-Zx9Qw8Er7Ty6Ui5Op4As3Df2Gh1JkLzXcVbNm0Qw",
+      "expected_output": "SK-Zx9Qw8Er7Ty6Ui5Op4As3Df2Gh1JkLzXcVbNm0Qw"
+    },
+    {
+      "id": "neg-uppercase-rk",
+      "input": "RK_LIVE_51Zx9Qw8Er7Ty6Ui5Op4As3Df2Gh1JkL",
+      "expected_output": "RK_LIVE_51Zx9Qw8Er7Ty6Ui5Op4As3Df2Gh1JkL"
+    },
+    {
+      "id": "neg-lowercase-akia",
+      "input": "akiazx9qw8er7ty6ui5o",
+      "expected_output": "akiazx9qw8er7ty6ui5o"
+    }
+  ]
+}
