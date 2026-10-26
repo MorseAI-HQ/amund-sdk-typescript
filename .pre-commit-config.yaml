@@ -33,7 +33,7 @@ repos:
         #    committed compressed precisely BECAUSE of this cap — raw it is 36 MB,
         #    which would sit in git history forever. Regenerate with
         #    `manage.py dump_demo_seed_sql`, which gzips by default.
-        exclude: "^(apps/api/apps/core/demo_seed/fixtures/|apps/docs/public/screenshots/|scripts/seed_demo_prod\\.sql\\.gz$)"
+        exclude: "^(apps/api/apps/core/demo_seed/fixtures/|apps/docs/public/screenshots/|apps/docs/public/videos/|scripts/seed_demo_prod\\.sql\\.gz$)"
       - id: check-merge-conflict
 
   # Secret detection — blocks secrets at commit time (DEV-01)
