@@ -150,6 +150,11 @@
     "output_per_mtok": 10.0,
     "cached_per_mtok": 0.1
   },
+  "gpt-6.1-terra": {
+    "input_per_mtok": 1.0,
+    "output_per_mtok": 5.0,
+    "cached_per_mtok": 0.05
+  },
   "gpt-6-sol": {
     "input_per_mtok": 2.0,
     "output_per_mtok": 10.0,
