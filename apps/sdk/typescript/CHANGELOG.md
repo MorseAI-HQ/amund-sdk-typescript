@@ -9,12 +9,12 @@ The TypeScript and Python SDKs version **independently** — they share `0.4.0` 
 their first public release because they reached feature parity there, not
 because they are released in lockstep. Expect the numbers to diverge.
 
-## [0.7.0] — Unreleased (release candidate `0.7.0-rc.1`)
+## [0.7.0] — 2026-11-04
 
-`0.7.0` was never published (npm `latest` is `0.6.0`), so everything below ships together as
-`0.7.0`, published as **`@morsehq-dev/sdk`** (founder decision 2026-10-24, MHQ-1411; the in-repo
-`@morsehq/sdk` is only the pnpm workspace id and is rewritten by the release workflow). The release
-goes out as `0.7.0-rc.1` first (SDK_PUBLISHING.md §1.1).
+Published as **`@morsehq-dev/sdk`** (founder decision 2026-10-24, MHQ-1411; the in-repo
+`@morsehq/sdk` is only the pnpm workspace id and is rewritten by the release workflow).
+Everything below shipped first as `0.7.0-rc.1` (2026-10-24, npm dist-tag `rc`) before this
+release (SDK_PUBLISHING.md §1.1).
 
 ### Fixed — client-side redaction matches the server (WP-12)
 
