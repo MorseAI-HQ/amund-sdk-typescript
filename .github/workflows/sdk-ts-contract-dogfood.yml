@@ -1,0 +1,118 @@
+name: SDK TS contract dogfood
+
+# Ported from the retired MorseAI-HQ/morse-ai monorepo
+# (.github/workflows/sdk-ts-contract-dogfood.yml).
+#
+# Wire-format contract check: catches the class of bug where the TS SDK
+# emits a payload the backend silently rejects (HTTP 200 + per-trace
+# error). Three such bugs shipped in Phase 13 (commits 35ea845, 8e63930,
+# e99d1c1) because the unit tests use a mocked transport and never
+# round-trip through the real ingest schema.
+#
+# Triggers only on PRs that change the TS SDK (or this workflow). The
+# backend ingest schema now lives in morse-api, so schema-side changes no
+# longer trigger this check from here.
+#
+# Secrets: CI_SDK_SMOKE_API_KEY (required, throwaway dev environment key)
+# and CI_SDK_SMOKE_ENDPOINT (optional; smoke.ts defaults to the dev
+# `/api/v1/traces/batch` URL). If the API key is not configured (or the
+# PR comes from a fork, where secrets are withheld) the smoke step is
+# skipped with a notice. When the key IS set, a failing smoke fails the job.
+
+on:
+  pull_request:
+    paths:
+      - "apps/sdk/typescript/**"
+      - "pnpm-lock.yaml"
+      - ".github/workflows/sdk-ts-contract-dogfood.yml"
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+  pull-requests: read
+
+jobs:
+  smoke:
+    name: SDK TS wire-format smoke
+    runs-on: ubuntu-latest
+    env:
+      MORSE_API_KEY: ${{ secrets.CI_SDK_SMOKE_API_KEY }}
+      MORSE_ENDPOINT: ${{ secrets.CI_SDK_SMOKE_ENDPOINT }}
+    steps:
+      - name: Check smoke credentials are configured
+        id: creds
+        run: |
+          if [ -z "${MORSE_API_KEY}" ]; then
+            echo "configured=false" >> "$GITHUB_OUTPUT"
+            echo "::notice title=SDK TS wire-format smoke skipped::CI_SDK_SMOKE_API_KEY is not set in this repository (or this PR is from a fork). Add the CI_SDK_SMOKE_API_KEY (and optionally CI_SDK_SMOKE_ENDPOINT) secret to enable the smoke."
+            {
+              echo "## TS SDK wire-format smoke skipped"
+              echo ""
+              echo "The \`CI_SDK_SMOKE_API_KEY\` secret is not available to this run, so the"
+              echo "smoke against the dev backend did not run. This is not a failure."
+            } >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "configured=true" >> "$GITHUB_OUTPUT"
+            if [ -z "${MORSE_ENDPOINT}" ]; then
+              echo "::notice::CI_SDK_SMOKE_ENDPOINT is not set; smoke.ts will use its built-in dev endpoint."
+            fi
+          fi
+
+      - uses: actions/checkout@v4
+        if: steps.creds.outputs.configured == 'true'
+        with:
+          fetch-depth: 1
+
+      - uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1 # v4.3.0
+        if: steps.creds.outputs.configured == 'true'
+        # Version inferred from root package.json "packageManager" (pnpm@9.15.4).
+
+      - uses: actions/setup-node@v4
+        if: steps.creds.outputs.configured == 'true'
+        with:
+          node-version: "20"
+          cache: pnpm
+
+      - name: Install workspace dependencies
+        if: steps.creds.outputs.configured == 'true'
+        run: pnpm install --frozen-lockfile
+
+      - name: Build TS SDK (sanity)
+        if: steps.creds.outputs.configured == 'true'
+        working-directory: apps/sdk/typescript
+        run: pnpm build
+
+      - name: Run wire-format smoke against dev backend
+        if: steps.creds.outputs.configured == 'true'
+        working-directory: apps/sdk/typescript
+        run: pnpm dogfood:smoke
+
+      - name: Surface failure context in PR check summary
+        if: failure() && steps.creds.outputs.configured == 'true'
+        run: |
+          {
+            echo "## TS SDK wire-format contract broken"
+            echo ""
+            echo "FIRST: if the step log says 'CREDENTIAL PROBLEM, NOT A CODE"
+            echo "PROBLEM' (HTTP 401/403), the stored CI_SDK_SMOKE_API_KEY"
+            echo "secret is dead — rotate it per the instructions in that log line."
+            echo "That failure has nothing to do with this PR's changes."
+            echo ""
+            echo "The smoke check sent representative traces to the dev backend"
+            echo "and either got rejected (response.rejected > 0) or never got"
+            echo "an HTTP 200. Re-read the previous step's log for the api error"
+            echo "array — it lists the exact field/value the backend wouldn't accept."
+            echo ""
+            echo "Most-common causes (Phase 13 history):"
+            echo "- Renamed or typo'd a top-level field on the trace or span dict"
+            echo "- Changed the span_id format (must be 32-hex UUID)"
+            echo "- Added a required TracePayloadIn field on the api without the matching SDK emit"
+            echo ""
+            echo "Fix path: update apps/sdk/typescript/src/_internal/tracing.ts"
+            echo "(buildTraceDict / span builder) to match the backend trace ingest"
+            echo "schema in MorseAI-HQ/morse-api (apps/api/apps/traces/schemas.py), then add a"
+            echo "smoke scenario in apps/sdk/typescript/dogfood/smoke.ts covering the new field."
+          } >> "$GITHUB_STEP_SUMMARY"
