@@ -1,3 +1,6 @@
+# One `pre-commit install` wires all three stages (commit, commit-msg, pre-push).
+default_install_hook_types: [pre-commit, commit-msg, pre-push]
+
 repos:
   # Python quality (ruff replaces black + flake8 + isort)
   - repo: https://github.com/astral-sh/ruff-pre-commit
@@ -102,3 +105,16 @@ repos:
           - ci
           - build
           - revert
+
+  # Pre-push gate (CI train design, 2026-11-12): scoped checks run locally where minutes are free.
+  # Skip once, knowingly: SKIP=prepush-checks git push.
+  - repo: local
+    hooks:
+      - id: prepush-checks
+        name: pre-push checks
+        entry: scripts/prepush.sh
+        language: system
+        stages: [pre-push]
+        pass_filenames: false
+        always_run: true
+        verbose: true
