@@ -349,7 +349,8 @@ function buildSingleton(opts: InitOptions, redaction: RedactionConfig): Singleto
       // network blip still gets several retries with backoff; a fully dead
       // endpoint fails within a bounded, shutdown-friendly window instead
       // of the library's full 30s ceiling. Mirrors the Python SDK.
-      timeoutMillis: 10_000,
+      // Shortened 10s -> 4s (offshore QA 2026-11-12): a dead endpoint held process exit ~12s.
+      timeoutMillis: 4_000,
       redactionConfig: redaction,
       gitRevision: identity.gitRevision,
       serviceVersion: identity.serviceVersion,

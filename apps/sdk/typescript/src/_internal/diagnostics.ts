@@ -105,6 +105,21 @@ export const REASON_SEND_FAILED = "send_failed";
 // report on itself (SDKDIAG-06). A constant here would be unreachable by
 // construction. See SDKDIAG-09.
 
+/**
+ * Plain-language cause for the local warning, so a wrong or revoked key reads as that and not as
+ * an OpenTelemetry internal (offshore QA 2026-11-12). Unknown reasons keep the generic text.
+ */
+const REASON_HINTS: Record<string, string> = {
+  [REASON_AUTH_REJECTED]:
+    "Morse rejected your API key (wrong, revoked or expired); check MORSE_API_KEY",
+  [REASON_QUOTA_REJECTED]:
+    "Morse is rate limiting or over quota for this key; telemetry is being lost",
+  [REASON_ENDPOINT_REJECTED]: "Morse rejected the request; check the endpoint URL and SDK version",
+  [REASON_RETRY_EXHAUSTED]:
+    "could not reach the Morse API after retrying; check your network and endpoint",
+  [REASON_SEND_FAILED]: "could not reach the Morse API; telemetry is being lost",
+};
+
 interface CounterEntry {
   reason: string;
   category: string;
@@ -338,7 +353,9 @@ export function recordDrop(reason: string, category: string, quantity = 1): void
     if (
       checkBucket(localLogBuckets, `drop:${key}`, LOCAL_LOG_LIMIT_PER_WINDOW, LOCAL_LOG_WINDOW_MS)
     ) {
-      console.warn(`morse: dropped ${quantity} ${category} (${reason}) — telemetry is being lost`);
+      console.warn(
+        `morse: dropped ${quantity} ${category} (${reason}) — ${REASON_HINTS[reason] ?? "telemetry is being lost"}`,
+      );
     }
     // MHQ-1030: arm the flush timer so the count goes out on the normal
     // cadence. Counters alone used to arm nothing, so a process that lost
