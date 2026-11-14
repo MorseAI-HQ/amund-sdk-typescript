@@ -94,6 +94,7 @@ import {
   report,
   setDiagnosticsClientConfig,
   flushOnce as flushDiagnosticsOnce,
+  recordUnsentRunNoKey,
   _resetForTesting as _resetDiagnosticsForTesting,
 } from "./_internal/diagnostics";
 import { _setEnsureInitialized as _setLogEnsureInitialized } from "./log";
@@ -389,6 +390,17 @@ function ensureInitialized(): SingletonState | null {
   return singleton;
 }
 
+/**
+ * `ensureInitialized()` for run entry points. MHQ-1787: a run opened with no API
+ * key keeps its trace id but is never sent, so count it for the exit warning.
+ * `MORSE_DISABLED` is a deliberate opt-out and is not counted.
+ */
+function ensureInitializedForRun(): void {
+  if (ensureInitialized() === null && !readIsDisabled() && !readApiKeyFromEnv()) {
+    recordUnsentRunNoKey();
+  }
+}
+
 // Wire the lazy-init hook into log.ts so `log()` participates in the
 // same env-driven auto-init flow as `track()` / `record()`. Discards
 // the return value — log.ts only needs the side-effect of populating
@@ -552,7 +564,7 @@ export function run<T>(
   const opts = typeof nameOrOpts === "string" ? { agentName: nameOrOpts } : nameOrOpts;
   // Make sure the SDK is initialised so spans get sent. Failure to init
   // is fine — `_runSync` records to `lastTrace` regardless, useful for tests.
-  ensureInitialized();
+  ensureInitializedForRun();
   // We can't reliably detect async vs sync up front in TypeScript, so we
   // route through `_runSync` and, if the user's `fn` returns a promise,
   // the wrapping trace ends synchronously after the promise is created.
@@ -567,7 +579,7 @@ export function runTraced<T>(
   options: RunOptions,
   fn: (handle: RunHandle) => Promise<T>,
 ): Promise<T | undefined> {
-  ensureInitialized();
+  ensureInitializedForRun();
   return _runAsync(options, fn);
 }
 

@@ -368,6 +368,45 @@ export function recordDrop(reason: string, category: string, quantity = 1): void
   }
 }
 
+/* MHQ-1787 (offshore QA round 1, finding 06): with no MORSE_API_KEY and no
+ * `init()`, `morse.run()` still hands back a real-looking trace id (kept on
+ * purpose, `traceId` semantics are unchanged) while nothing is ever sent. The
+ * one-time "SDK calls are silent no-ops" warning at first use is easy to miss,
+ * so count those runs and say so loudly, once, when the process exits. No
+ * public attribute: the count lives here and only feeds the warning. */
+let unsentNoKeyRuns = 0;
+let unsentExitHookRegistered = false;
+
+/** Count a run that cannot be sent because no API key is set. Never throws. */
+export function recordUnsentRunNoKey(): void {
+  try {
+    unsentNoKeyRuns += 1;
+    if (!unsentExitHookRegistered && typeof process !== "undefined" && process.once) {
+      unsentExitHookRegistered = true;
+      // "exit" (not "beforeExit") also fires on `process.exit()`; console.warn
+      // is synchronous, which is all an exit handler may do.
+      process.once("exit", warnUnsentRunsAtExit);
+    }
+  } catch {
+    // Counter bookkeeping must never break a caller.
+  }
+}
+
+/** Warn once that runs were not sent for lack of an API key. Never throws. */
+export function warnUnsentRunsAtExit(): void {
+  try {
+    const count = unsentNoKeyRuns;
+    unsentNoKeyRuns = 0;
+    if (count > 0) {
+      console.warn(
+        `morse: ${count} run(s) not sent: no API key (set MORSE_API_KEY or call init())`,
+      );
+    }
+  } catch {
+    // Never break process exit.
+  }
+}
+
 export function drainCounters(): CounterEntry[] {
   if (counters.size === 0) return [];
   const drained = [...counters.values()];
@@ -595,6 +634,7 @@ export function _resetForTesting(): void {
   rateBuckets.clear();
   localLogBuckets.clear();
   counters.clear();
+  unsentNoKeyRuns = 0;
   pending = [];
   if (timer !== null) {
     clearInterval(timer);

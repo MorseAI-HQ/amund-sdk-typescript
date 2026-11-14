@@ -9,6 +9,14 @@ The TypeScript and Python SDKs version **independently** — they share `0.4.0` 
 their first public release because they reached feature parity there, not
 because they are released in lockstep. Expect the numbers to diverge.
 
+## [Unreleased]
+
+### Changed — no API key: a loud one-time warning at exit (MHQ-1787)
+
+- With no `MORSE_API_KEY` and no `init()`, `run()` / `runTraced()` still return a trace id but send
+  nothing. The process now also prints one warning at exit, `morse: N run(s) not sent: no API key
+(set MORSE_API_KEY or call init())`. No public API change; `MORSE_DISABLED=1` stays silent.
+
 ## [0.7.0] — 2026-11-04
 
 Published as **`@morsehq-dev/sdk`** (founder decision 2026-10-24, MHQ-1411; the in-repo

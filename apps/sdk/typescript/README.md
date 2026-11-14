@@ -2,6 +2,8 @@
 
 Unified observability for AI agents and infrastructure — Node backend, one SDK.
 
+**Requires Node.js 18.19+ or 20.6+.**
+
 > **Built for Node; safe to bundle for the browser.** The full feature set
 > targets Node.js backends (Node 18.19+ or 20.6+). Bundlers that build for
 > the browser automatically resolve the `"browser"` export condition to a
