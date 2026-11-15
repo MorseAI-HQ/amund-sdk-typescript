@@ -11,6 +11,8 @@ because they are released in lockstep. Expect the numbers to diverge.
 
 ## [Unreleased]
 
+## [0.7.1] — 2026-11-15
+
 ### Changed — plain messages for a bad key and an unreachable endpoint (MHQ-1838)
 
 - `init()` warns once when the key does not look like a Morse key (`mhq_…` ending in 64 hex

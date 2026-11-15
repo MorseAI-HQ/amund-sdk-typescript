@@ -1,6 +1,6 @@
 {
   "name": "@morsehq/sdk",
-  "version": "0.7.0",
+  "version": "0.7.1",
   "description": "Unified observability for AI agents and infrastructure. One SDK.",
   "license": "MIT",
   "homepage": "https://morsehq.dev",
