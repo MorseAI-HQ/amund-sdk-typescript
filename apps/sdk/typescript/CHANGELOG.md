@@ -11,6 +11,19 @@ because they are released in lockstep. Expect the numbers to diverge.
 
 ## [Unreleased]
 
+### Changed — plain messages for a bad key and an unreachable endpoint (MHQ-1838)
+
+- `init()` warns once when the key does not look like a Morse key (`mhq_…` ending in 64 hex
+  characters): `morse: Morse API key looks malformed (<reason>). Check MORSE_API_KEY.` Local
+  check only; the key is still used as given.
+- A 401/403 now reads `morse: Morse rejected the API key (401): N span(s) dropped. Check
+MORSE_API_KEY or get a new key in Settings → API keys.`
+- A network failure reads `morse: Morse unreachable (<host>): N span(s) dropped after retries.
+Spans are not buffered across outages.`, preceded once per outage by `morse: Morse unreachable
+(<host>), retrying…` (or `not responding` on the OTLP path).
+- The raw `morse internal error [...]` line for those two cases now prints only with
+  `MORSE_SDK_DEBUG=1`. Text only: no API, retry, timeout or buffering change.
+
 ### Changed — no API key: a loud one-time warning at exit (MHQ-1787)
 
 - With no `MORSE_API_KEY` and no `init()`, `run()` / `runTraced()` still return a trace id but send

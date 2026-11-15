@@ -27,6 +27,9 @@
  */
 
 import {
+  isNetworkError,
+  noteDelivered,
+  noteRetrying,
   recordDrop,
   report,
   setLevel,
@@ -491,13 +494,17 @@ export class BatchTransport {
     // MHQ-1001: 3 attempts, jittered backoff, 4xx never retried except 429.
     // Every `return` below is a terminal outcome; `continue` is the only path
     // that retries, and it always checks the deadline first.
+    let lastUnreachable = false;
     for (let attempt = 1; attempt <= MAX_SEND_ATTEMPTS; attempt++) {
       const lastAttempt = attempt >= MAX_SEND_ATTEMPTS;
       const outOfTime = Date.now() >= deadline;
       if (outOfTime && attempt > 1) {
         // The drain ran out of budget mid-retry. Report it as exhausted rather
         // than send_failed: attempts WERE made, we just stopped early.
-        recordDrop(REASON_RETRY_EXHAUSTED, droppedCategory, droppedCount);
+        recordDrop(REASON_RETRY_EXHAUSTED, droppedCategory, droppedCount, {
+          host: hostnameOf(url),
+          unreachable: lastUnreachable,
+        });
         return;
       }
       const controller = new AbortController();
@@ -519,8 +526,12 @@ export class BatchTransport {
         // SDKDIAG-05: the server pushes the SDK's self-reporting verbosity on a
         // response we are already receiving — no config round-trip.
         setLevel(resp.headers.get("X-Morse-Diagnostics"));
+        lastUnreachable = false;
 
-        if (resp.ok) return;
+        if (resp.ok) {
+          noteDelivered();
+          return;
+        }
 
         // Order matters: recordQuotaState reads `resp.clone().json()`, and a
         // clone cannot be taken once the body has been consumed. Draining the
@@ -538,6 +549,8 @@ export class BatchTransport {
         report(new Error(`morse: batch POST returned ${resp.status} ${bodySnippet}`), {
           fingerprint: "morse.transport.post.non_2xx",
           extra: { endpoint_host: hostnameOf(url), sdk_version: SDK_VERSION },
+          // A rejected key gets its own plain warning below (MHQ-1838).
+          localOnlyInDebug: resp.status === 401 || resp.status === 403,
         });
 
         if (resp.status === 429) {
@@ -559,6 +572,7 @@ export class BatchTransport {
               : REASON_ENDPOINT_REJECTED,
             droppedCategory,
             droppedCount,
+            { status: resp.status, host: hostnameOf(url) },
           );
           return;
         }
@@ -572,14 +586,22 @@ export class BatchTransport {
         continue;
       } catch (err) {
         // Network error / abort / timeout — retryable, same as Python.
+        const unreachable = isNetworkError(err);
+        lastUnreachable = unreachable;
         report(err, {
           fingerprint: "morse.transport.post.network",
           extra: { endpoint_host: hostnameOf(url), sdk_version: SDK_VERSION },
+          // The plain "unreachable" lines say this; raw detail is debug-only (MHQ-1838).
+          localOnlyInDebug: unreachable,
         });
         if (lastAttempt || this.closed || Date.now() >= deadline) {
-          recordDrop(dropReasonFor(attempt, this.closed, deadline), droppedCategory, droppedCount);
+          recordDrop(dropReasonFor(attempt, this.closed, deadline), droppedCategory, droppedCount, {
+            host: hostnameOf(url),
+            unreachable,
+          });
           return;
         }
+        if (unreachable) noteRetrying(hostnameOf(url));
         await sleepUntil(backoffDelayMs(attempt), deadline);
         continue;
       } finally {

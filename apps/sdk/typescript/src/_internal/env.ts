@@ -246,3 +246,21 @@ export function getHttpExcludeHosts(): string[] {
     .map((h) => h.trim().toLowerCase())
     .filter(Boolean);
 }
+
+/*
+ * Every Morse key is `mhq_` + optional segments (`prod_`, `pk_dev_`, …) + 64
+ * hex characters (apps/api `api_keys/models.py::generate_key`). A cheap local
+ * shape check, so a truncated or mis-pasted key is named at init instead of
+ * only as a 401 at the first flush (offshore QA round 2, MHQ-1838). Warning
+ * only: no network call, the key is still used exactly as given.
+ */
+const API_KEY_SHAPE = /^mhq_(?:[A-Za-z0-9-]+_)*[0-9a-fA-F]{64}$/;
+
+/** Why `apiKey` does not look like a Morse key, or `null` if it does. Never echoes the key. */
+export function apiKeyShapeProblem(apiKey: string): string | null {
+  if (API_KEY_SHAPE.test(apiKey)) return null;
+  if (/^["']|["']$/.test(apiKey)) return "it is wrapped in quotes";
+  if (apiKey.trim() !== apiKey) return "it has leading or trailing spaces";
+  if (!apiKey.startsWith("mhq_")) return "it does not start with mhq_";
+  return "it looks truncated or mistyped";
+}

@@ -218,3 +218,11 @@ condition = "AND"
 regexTarget = "secret"
 paths = ["^apps/sdk/shared\\-fixtures/redaction_provider_keys\\.json$"]
 regexes = ["^rk_live_Zx9Qw8Er7Ty6Ui5Op4A$"] # pragma: allowlist secret (reviewed synthetic fixture values only)
+
+[[allowlists]]
+description = "Synthetic truncated key for the malformed-key warning test (MHQ-1838)"
+targetRules = ["generic-api-key"]
+condition = "AND"
+regexTarget = "secret"
+paths = ["^apps/sdk/typescript/tests/plain-delivery-messages\\.test\\.ts$"]
+regexes = ["^mhq_prod_abc123$"] # pragma: allowlist secret (reviewed synthetic fixture values only)

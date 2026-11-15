@@ -36,6 +36,7 @@ import {
 } from "./_internal/auto-detect";
 import { absorbErrorsAsync, absorbErrorsSync } from "./_internal/errors";
 import {
+  apiKeyShapeProblem,
   DEFAULT_ENDPOINT,
   getApiKey as readApiKeyFromEnv,
   getEndpoint as readEndpointFromEnv,
@@ -267,6 +268,16 @@ function logDestinationOnce(endpoint: string): void {
   );
 }
 
+let malformedKeyWarned = false;
+
+function warnIfKeyMalformed(apiKey: string): void {
+  if (malformedKeyWarned) return;
+  const problem = apiKeyShapeProblem(apiKey);
+  if (problem === null) return;
+  malformedKeyWarned = true;
+  logger("warn", `morse: Morse API key looks malformed (${problem}). Check MORSE_API_KEY.`);
+}
+
 function resolveEndpoint(explicit?: string): string {
   if (explicit && explicit.length > 0) return explicit;
   const fromEnv = readEndpointFromEnv();
@@ -309,6 +320,7 @@ function buildSingleton(opts: InitOptions, redaction: RedactionConfig): Singleto
     }
     return null;
   }
+  warnIfKeyMalformed(apiKey);
   const endpoint = resolveEndpoint(opts.endpoint);
   const flushIntervalSeconds = opts.flushIntervalSeconds ?? getFlushIntervalSeconds();
   const transport = transportFactory({ apiKey, endpoint, flushIntervalSeconds });
@@ -810,6 +822,7 @@ export function _resetForTesting(): void {
   }
   getOtelEngine().resetForTesting();
   noApiKeyWarningEmitted = false;
+  malformedKeyWarned = false;
   lastLoggedEndpoint = null;
   promptLinkLogged = false;
   _setSource(null);

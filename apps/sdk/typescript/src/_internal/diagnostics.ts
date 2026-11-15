@@ -120,6 +120,98 @@ const REASON_HINTS: Record<string, string> = {
   [REASON_SEND_FAILED]: "could not reach the Morse API; telemetry is being lost",
 };
 
+/**
+ * What the transport knows about a drop beyond its reason code, so the local warning can name the
+ * cause in plain words (offshore QA round 2, MHQ-1838). Optional: callers that know nothing more
+ * get the generic hint above. Changes only the text of the warning — never counting or delivery.
+ */
+export interface DropDetail {
+  /** HTTP status the server answered with (401/403 for a rejected key). */
+  status?: number;
+  /** Host the SDK was sending to, e.g. `api.morsehq.dev`. */
+  host?: string;
+  /** The send failed at the network layer (DNS, refused, reset, timeout), not with an HTTP answer. */
+  unreachable?: boolean;
+}
+
+const NETWORK_ERROR_PATTERN =
+  /ENOTFOUND|EAI_AGAIN|ECONNREFUSED|ECONNRESET|ETIMEDOUT|EHOSTUNREACH|ENETUNREACH|EPIPE|socket hang up|fetch failed|timed? ?out|timeout|aborted/i;
+
+/**
+ * True when `err` is a network-layer failure (DNS, connection refused or reset, timeout) rather
+ * than an HTTP answer. Looks at `code`, `message` and one level of `cause` (undici's `fetch failed`
+ * carries the real errno there). Never throws.
+ */
+export function isNetworkError(err: unknown): boolean {
+  try {
+    const seen = [err, (err as { cause?: unknown } | null | undefined)?.cause];
+    for (const e of seen) {
+      if (e == null) continue;
+      const code = (e as { code?: unknown }).code;
+      if (typeof code === "string" && NETWORK_ERROR_PATTERN.test(code)) return true;
+      const message = e instanceof Error ? e.message : typeof e === "string" ? e : "";
+      if (message && NETWORK_ERROR_PATTERN.test(message)) return true;
+    }
+  } catch {
+    // Classification is best-effort.
+  }
+  return false;
+}
+
+/** True when `err` carries an HTTP 401/403 as its `code` (the `OTLPExporterError` shape). */
+export function isAuthError(err: unknown): boolean {
+  const code = (err as { code?: unknown } | null | undefined)?.code;
+  return code === 401 || code === 403;
+}
+
+function plural(category: string): string {
+  return `${category.charAt(0).toUpperCase()}${category.slice(1)}s`;
+}
+
+/** The one-line local warning for a drop. Exported for tests. */
+export function dropWarning(
+  reason: string,
+  category: string,
+  quantity: number,
+  detail?: DropDetail,
+): string {
+  const count = `${quantity} ${category}(s)`;
+  if (reason === REASON_AUTH_REJECTED) {
+    const status = detail?.status ?? "401/403";
+    return `morse: Morse rejected the API key (${status}): ${count} dropped. Check MORSE_API_KEY or get a new key in Settings → API keys.`;
+  }
+  if (detail?.unreachable && (reason === REASON_RETRY_EXHAUSTED || reason === REASON_SEND_FAILED)) {
+    const host = detail.host ?? "the Morse API";
+    return `morse: Morse unreachable (${host}): ${count} dropped after retries. ${plural(category)} are not buffered across outages.`;
+  }
+  return `morse: dropped ${quantity} ${category} (${reason}) — ${REASON_HINTS[reason] ?? "telemetry is being lost"}`;
+}
+
+/* One "retrying" line per outage, so the wait before a drop is not silent. Reset by the next
+ * successful send, so a later outage says so again. */
+let retryingNoticeShown = false;
+
+/** Say once per outage that the SDK is retrying. Text only; never throws. */
+export function noteRetrying(host: string | undefined, notResponding = false): void {
+  try {
+    if (retryingNoticeShown) return;
+    retryingNoticeShown = true;
+    const where = host ?? "the Morse API";
+    console.warn(
+      notResponding
+        ? `morse: Morse not responding (${where}), retrying…`
+        : `morse: Morse unreachable (${where}), retrying…`,
+    );
+  } catch {
+    // Never break a send.
+  }
+}
+
+/** A send succeeded: the next outage gets its own "retrying" line. */
+export function noteDelivered(): void {
+  retryingNoticeShown = false;
+}
+
 interface CounterEntry {
   reason: string;
   category: string;
@@ -342,7 +434,12 @@ export function scrubExtra(extra: Record<string, unknown> | undefined): Record<s
  * Delivery loss is what the customer's on-call most needs to know, so it is a
  * `console.warn` locally even though it is only a counter on the wire.
  */
-export function recordDrop(reason: string, category: string, quantity = 1): void {
+export function recordDrop(
+  reason: string,
+  category: string,
+  quantity = 1,
+  detail?: DropDetail,
+): void {
   try {
     if (quantity <= 0) return;
     const key = `${reason}:${category}`;
@@ -353,9 +450,7 @@ export function recordDrop(reason: string, category: string, quantity = 1): void
     if (
       checkBucket(localLogBuckets, `drop:${key}`, LOCAL_LOG_LIMIT_PER_WINDOW, LOCAL_LOG_WINDOW_MS)
     ) {
-      console.warn(
-        `morse: dropped ${quantity} ${category} (${reason}) — ${REASON_HINTS[reason] ?? "telemetry is being lost"}`,
-      );
+      console.warn(dropWarning(reason, category, quantity, detail));
     }
     // MHQ-1030: arm the flush timer so the count goes out on the normal
     // cadence. Counters alone used to arm nothing, so a process that lost
@@ -417,6 +512,12 @@ export function drainCounters(): CounterEntry[] {
 export interface ReportOptions {
   fingerprint: string;
   extra?: Record<string, unknown>;
+  /**
+   * Print the raw local line only under `MORSE_SDK_DEBUG=1`. For failures a plain drop warning
+   * already explained (rejected key, unreachable endpoint), so the host is not shown an
+   * OpenTelemetry internal on top of it (MHQ-1838). Transmission is unaffected.
+   */
+  localOnlyInDebug?: boolean;
 }
 
 /**
@@ -435,6 +536,7 @@ export function report(error: unknown, options: ReportOptions): void {
     // SDKDIAG-10: local FIRST, gated only by its own limiter. Transmission may
     // be off, blocked, or failing — the host still sees it.
     if (
+      (!options.localOnlyInDebug || isDebug()) &&
       checkBucket(
         localLogBuckets,
         options.fingerprint,
@@ -635,6 +737,7 @@ export function _resetForTesting(): void {
   localLogBuckets.clear();
   counters.clear();
   unsentNoKeyRuns = 0;
+  retryingNoticeShown = false;
   pending = [];
   if (timer !== null) {
     clearInterval(timer);

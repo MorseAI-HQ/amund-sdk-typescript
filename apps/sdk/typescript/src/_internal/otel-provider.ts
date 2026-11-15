@@ -89,6 +89,10 @@ import {
 import { NodeTracerProvider } from "@opentelemetry/sdk-trace-node";
 
 import {
+  isAuthError,
+  isNetworkError,
+  noteDelivered,
+  noteRetrying,
   recordDrop,
   report,
   REASON_AUTH_REJECTED,
@@ -405,6 +409,14 @@ class RedactingSpanExporter implements SpanExporter {
  * discarded — the exporter retried, honoured `Retry-After`, and used up its
  * budget, which is precisely `retry_exhausted`.
  */
+function hostOf(url: string): string | undefined {
+  try {
+    return new URL(url).host;
+  } catch {
+    return undefined;
+  }
+}
+
 function dropReasonForExportError(error: unknown): string {
   const code = (error as { code?: unknown } | null | undefined)?.code;
   if (typeof code !== "number") return REASON_RETRY_EXHAUSTED;
@@ -425,18 +437,42 @@ function dropReasonForExportError(error: unknown): string {
  * Delivery is untouched — this only counts.
  */
 export class DropReportingExporter implements SpanExporter {
-  constructor(private readonly inner: SpanExporter) {}
+  /**
+   * @param host Endpoint host, named in the plain "unreachable" warning (MHQ-1838).
+   * @param slowNoticeMs After this long without an answer the host is told the SDK is retrying,
+   *   once per outage, so the wait before a drop is not silent. Text only: the timer is unref'd and
+   *   cleared on the answer, and delivery and retry timing are untouched.
+   */
+  constructor(
+    private readonly inner: SpanExporter,
+    private readonly host?: string,
+    private readonly slowNoticeMs = 1_500,
+  ) {}
 
   export(spans: ReadableSpan[], resultCallback: (result: ExportResult) => void): void {
+    let slowTimer: ReturnType<typeof setTimeout> | null = null;
+    try {
+      slowTimer = setTimeout(() => noteRetrying(this.host, true), this.slowNoticeMs);
+      (slowTimer as { unref?: () => void }).unref?.();
+    } catch {
+      slowTimer = null;
+    }
     this.inner.export(spans, (result) => {
-      if (result.code === ExportResultCode.FAILED) {
-        // recordDrop never throws, but this callback runs on the exporter's
-        // own path — a fault here must not cost the caller its callback.
-        try {
-          recordDrop(dropReasonForExportError(result.error), "span", spans.length);
-        } catch {
-          // Counting must never break export.
+      if (slowTimer !== null) clearTimeout(slowTimer);
+      // recordDrop never throws, but this callback runs on the exporter's
+      // own path — a fault here must not cost the caller its callback.
+      try {
+        if (result.code === ExportResultCode.FAILED) {
+          recordDrop(dropReasonForExportError(result.error), "span", spans.length, {
+            status: (result.error as { code?: unknown } | undefined)?.code as number | undefined,
+            host: this.host,
+            unreachable: isNetworkError(result.error),
+          });
+        } else {
+          noteDelivered();
         }
+      } catch {
+        // Counting must never break export.
       }
       resultCallback(result);
     });
@@ -591,7 +627,7 @@ export class OtelEngine {
       timeoutMillis: opts.timeoutMillis,
     });
     let exporter: SpanExporter = new RedactingSpanExporter(
-      new DropReportingExporter(otlpExporter),
+      new DropReportingExporter(otlpExporter, hostOf(opts.endpoint)),
       opts.redactionConfig,
     );
     if (opts.resultSink) {
@@ -688,7 +724,13 @@ export class OtelEngine {
         await provider.forceFlush();
       } catch (err) {
         // Swallowed — mirrors Python's force_flush() debug-log-and-continue.
-        reportSwallowed(err, "morse.otel_provider.force_flush");
+        // A rejected key or an unreachable endpoint was already explained by
+        // the plain drop warning; the raw exporter error is debug-only.
+        reportSwallowed(
+          err,
+          "morse.otel_provider.force_flush",
+          isAuthError(err) || isNetworkError(err),
+        );
       }
     }
   }
@@ -1043,9 +1085,9 @@ export function emitTraceEntry(entry: TraceEntryLike): void {
  * Control flow is unchanged — the site still swallows, still returns the same
  * value. It is simply no longer invisible to us.
  */
-function reportSwallowed(err: unknown, fingerprint: string): void {
+function reportSwallowed(err: unknown, fingerprint: string, localOnlyInDebug = false): void {
   try {
-    report(err, { fingerprint });
+    report(err, { fingerprint, localOnlyInDebug });
   } catch {
     // Reporting must never break the swallow it is reporting on.
   }
