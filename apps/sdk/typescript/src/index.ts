@@ -16,7 +16,7 @@
  * // Or call init() explicitly to override env-var resolution:
  * morse.init({
  *   apiKey: "mhq_xxx", // pragma: allowlist secret — placeholder, not a key
- *   endpoint: "https://api.morsehq.dev/api/v1/traces/batch",
+ *   endpoint: "https://api.morseai.dev/api/v1/traces/batch",
  *   flushIntervalSeconds: 2,
  * });
  * ```

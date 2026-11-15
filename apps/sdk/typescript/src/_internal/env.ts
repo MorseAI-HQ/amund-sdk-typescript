@@ -46,11 +46,11 @@
 /**
  * Default ingestion endpoint.
  *
- * Phase 6c targets the Railway dev URL until the custom domain is wired up
- * in Phase 6d. Mirrors the Python SDK constant in
+ * Production API host (morseai.dev since 0.7.2; api.morsehq.dev stays served for
+ * older installs and explicit MORSE_ENDPOINT). Mirrors the Python SDK constant in
  * `apps/sdk/python/src/morse/client.py`.
  */
-export const DEFAULT_ENDPOINT = "https://api.morsehq.dev/api/v1/traces/batch";
+export const DEFAULT_ENDPOINT = "https://api.morseai.dev/api/v1/traces/batch";
 
 /**
  * Read an env var in a runtime-agnostic way.

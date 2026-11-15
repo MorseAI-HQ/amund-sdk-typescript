@@ -10,7 +10,7 @@
 
 import * as morse from "../src/index";
 
-export const DEV_ENDPOINT_DEFAULT = "https://api.morsehq.dev/api/v1/traces/batch";
+export const DEV_ENDPOINT_DEFAULT = "https://api.morseai.dev/api/v1/traces/batch";
 
 export function requireEnv(name: string, hint?: string): string {
   const v = process.env[name];

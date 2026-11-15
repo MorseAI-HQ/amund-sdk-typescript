@@ -251,14 +251,14 @@ describe("log() — wire routing", () => {
 
 describe("deriveLogsEndpoint", () => {
   it("replaces the path with /api/v1/logs/ingest", () => {
-    expect(deriveLogsEndpoint("https://api.morsehq.dev/api/v1/traces/batch")).toBe(
-      "https://api.morsehq.dev/api/v1/logs/ingest",
+    expect(deriveLogsEndpoint("https://api.morseai.dev/api/v1/traces/batch")).toBe(
+      "https://api.morseai.dev/api/v1/logs/ingest",
     );
   });
 
   it("drops query strings + fragments", () => {
-    expect(deriveLogsEndpoint("https://api.morsehq.dev/api/v1/traces/batch?x=1#y")).toBe(
-      "https://api.morsehq.dev/api/v1/logs/ingest",
+    expect(deriveLogsEndpoint("https://api.morseai.dev/api/v1/traces/batch?x=1#y")).toBe(
+      "https://api.morseai.dev/api/v1/logs/ingest",
     );
   });
 

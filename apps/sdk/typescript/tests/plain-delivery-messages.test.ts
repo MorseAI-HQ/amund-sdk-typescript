@@ -93,7 +93,7 @@ describe("OTLP path", () => {
     const err = Object.assign(new Error("Unauthorized"), { code: 401, name: "OTLPExporterError" });
     const exporter = new DropReportingExporter(
       inner({ code: ExportResultCode.FAILED, error: err }),
-      "api.morsehq.dev",
+      "api.morseai.dev",
     );
     exporter.export(SPANS, () => {});
     expect(warnings(warnSpy)).toContain(
@@ -102,16 +102,16 @@ describe("OTLP path", () => {
   });
 
   it("a DNS failure reads as unreachable and says spans are not buffered", () => {
-    const err = Object.assign(new Error("getaddrinfo ENOTFOUND api.morsehq.dev"), {
+    const err = Object.assign(new Error("getaddrinfo ENOTFOUND api.morseai.dev"), {
       code: "ENOTFOUND",
     });
     const exporter = new DropReportingExporter(
       inner({ code: ExportResultCode.FAILED, error: err }),
-      "api.morsehq.dev",
+      "api.morseai.dev",
     );
     exporter.export(SPANS, () => {});
     expect(warnings(warnSpy)).toContain(
-      "morse: Morse unreachable (api.morsehq.dev): 1 span(s) dropped after retries. Spans are not buffered across outages.",
+      "morse: Morse unreachable (api.morseai.dev): 1 span(s) dropped after retries. Spans are not buffered across outages.",
     );
     expect(diagnostics.drainCounters()).toEqual([
       { reason: "retry_exhausted", category: "span", quantity: 1 },
@@ -123,20 +123,20 @@ describe("OTLP path", () => {
     try {
       const slow = new DropReportingExporter(
         inner({ code: ExportResultCode.FAILED, error: new Error("ETIMEDOUT") }, 3_000),
-        "api.morsehq.dev",
+        "api.morseai.dev",
         1_500,
       );
       slow.export(SPANS, () => {});
       slow.export(SPANS, () => {});
       await vi.advanceTimersByTimeAsync(3_100);
       const retrying = warnings(warnSpy).filter((l) => l.includes("retrying"));
-      expect(retrying).toEqual(["morse: Morse not responding (api.morsehq.dev), retrying…"]);
+      expect(retrying).toEqual(["morse: Morse not responding (api.morseai.dev), retrying…"]);
 
       warnSpy.mockClear();
       diagnostics.noteDelivered();
       const quick = new DropReportingExporter(
         inner({ code: ExportResultCode.SUCCESS }, 100),
-        "api.morsehq.dev",
+        "api.morseai.dev",
         1_500,
       );
       quick.export(SPANS, () => {});
@@ -151,14 +151,14 @@ describe("OTLP path", () => {
 describe("raw error detail is debug-only for explained failures", () => {
   it("hides the raw line unless MORSE_SDK_DEBUG is set", () => {
     const errSpy = vi.spyOn(console, "error").mockImplementation(() => {});
-    diagnostics.report(new Error("getaddrinfo ENOTFOUND api.morsehq.dev"), {
+    diagnostics.report(new Error("getaddrinfo ENOTFOUND api.morseai.dev"), {
       fingerprint: "morse.otel_provider.force_flush",
       localOnlyInDebug: true,
     });
     expect(warnings(warnSpy).some((l) => l.includes("morse internal error"))).toBe(false);
 
     vi.stubEnv("MORSE_SDK_DEBUG", "1");
-    diagnostics.report(new Error("getaddrinfo ENOTFOUND api.morsehq.dev"), {
+    diagnostics.report(new Error("getaddrinfo ENOTFOUND api.morseai.dev"), {
       fingerprint: "morse.otel_provider.force_flush",
       localOnlyInDebug: true,
     });
@@ -171,7 +171,7 @@ describe("raw error detail is debug-only for explained failures", () => {
   it("classifies auth and network errors", () => {
     expect(diagnostics.isAuthError(Object.assign(new Error("x"), { code: 403 }))).toBe(true);
     expect(diagnostics.isAuthError(Object.assign(new Error("x"), { code: 404 }))).toBe(false);
-    expect(diagnostics.isNetworkError(new Error("getaddrinfo ENOTFOUND api.morsehq.dev"))).toBe(
+    expect(diagnostics.isNetworkError(new Error("getaddrinfo ENOTFOUND api.morseai.dev"))).toBe(
       true,
     );
     expect(
@@ -186,7 +186,7 @@ describe("raw error detail is debug-only for explained failures", () => {
 
   it("classifies the array forceFlush rejects with", () => {
     const auth = Object.assign(new Error("Unauthorized"), { code: 401 });
-    const dns = new Error("getaddrinfo ENOTFOUND api.morsehq.dev");
+    const dns = new Error("getaddrinfo ENOTFOUND api.morseai.dev");
     expect(diagnostics.isAuthError([auth])).toBe(true);
     expect(diagnostics.isNetworkError([dns])).toBe(true);
     expect(diagnostics.isAuthError([])).toBe(false);
@@ -197,7 +197,7 @@ describe("raw error detail is debug-only for explained failures", () => {
 describe("JSON transport", () => {
   it("401: one plain line, no raw internal error", async () => {
     const transport = new BatchTransport({
-      endpoint: "https://api.morsehq.dev/api/v1/traces/batch",
+      endpoint: "https://api.morseai.dev/api/v1/traces/batch",
       apiKey: "mhq_x", // pragma: allowlist secret
       flushIntervalSeconds: 100,
       maxBatchSize: 1,
@@ -215,13 +215,13 @@ describe("JSON transport", () => {
 
   it("offline: retrying line, then unreachable line, no raw internal error", async () => {
     const transport = new BatchTransport({
-      endpoint: "https://api.morsehq.dev/api/v1/traces/batch",
+      endpoint: "https://api.morseai.dev/api/v1/traces/batch",
       apiKey: "mhq_x", // pragma: allowlist secret
       flushIntervalSeconds: 100,
       maxBatchSize: 1,
       flushTimeoutMs: 30_000,
       fetchImpl: vi.fn(async () => {
-        throw new Error("getaddrinfo ENOTFOUND api.morsehq.dev");
+        throw new Error("getaddrinfo ENOTFOUND api.morseai.dev");
       }) as unknown as typeof fetch,
     });
     transport.track({ traces: [{ trace: { trace_id: "t1" }, spans: [] }] });
@@ -229,10 +229,10 @@ describe("JSON transport", () => {
     await transport.shutdown();
     const lines = warnings(warnSpy);
     expect(lines.filter((l) => l.includes("retrying"))).toEqual([
-      "morse: Morse unreachable (api.morsehq.dev), retrying…",
+      "morse: Morse unreachable (api.morseai.dev), retrying…",
     ]);
     expect(lines).toContain(
-      "morse: Morse unreachable (api.morsehq.dev): 1 trace(s) dropped after retries. Traces are not buffered across outages.",
+      "morse: Morse unreachable (api.morseai.dev): 1 trace(s) dropped after retries. Traces are not buffered across outages.",
     );
     expect(lines.some((l) => l.includes("morse internal error"))).toBe(false);
   }, 20_000);

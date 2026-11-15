@@ -144,8 +144,8 @@ describe("BatchTransport quota state (TQE-04 / MHQ-749)", () => {
       limit_count: 5000,
       plan_id: "free",
       period_start: "2026-07-01T00:00:00+00:00",
-      upgrade_url: "https://app.morsehq.dev/billing",
-      sample_rate_url: "https://app.morsehq.dev/billing/usage/breakdown",
+      upgrade_url: "https://app.morseai.dev/billing",
+      sample_rate_url: "https://app.morseai.dev/billing/usage/breakdown",
     };
     const fetchImpl = vi.fn(async () =>
       jsonResponse(429, eventLimitBody, {
@@ -177,7 +177,7 @@ describe("BatchTransport quota state (TQE-04 / MHQ-749)", () => {
     expect(state?.limitCount).toBe(5000);
     expect(state?.planId).toBe("free");
     expect(state?.periodStart).toBe("2026-07-01T00:00:00+00:00");
-    expect(state?.upgradeUrl).toBe("https://app.morsehq.dev/billing");
+    expect(state?.upgradeUrl).toBe("https://app.morseai.dev/billing");
     expect(state?.quotaLimit).toBe(5000);
     expect(state?.quotaRemaining).toBe(0);
     expect(state?.quotaReset).toBe(1754006400);

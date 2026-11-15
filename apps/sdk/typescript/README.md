@@ -433,7 +433,7 @@ bound values and with inline literals replaced by `?`; HTTP spans are `METHOD ho
 Opt out with `MORSE_CAPTURE_INFRA=0`, or per kind with `MORSE_CAPTURE_DB=0`,
 `MORSE_CAPTURE_HTTP=0`, `MORSE_CAPTURE_QUEUE=0`. A trace keeps at most 200 db, 100 http and 100
 queue spans; the rest become one summary span. Full details, including what is never recorded:
-https://docs.morsehq.dev/sdk/infra-capture
+https://docs.morseai.dev/sdk/infra-capture
 
 ## Transport
 
@@ -490,7 +490,7 @@ init({
 ## Docs
 
 Full reference — every adapter, all `init()` options, configuration,
-troubleshooting — lives at **[docs.morsehq.dev](https://docs.morsehq.dev)**.
+troubleshooting — lives at **[docs.morseai.dev](https://docs.morseai.dev)**.
 This README stays a quickstart.
 
 ## Installing what a release ships (QA / dogfood)

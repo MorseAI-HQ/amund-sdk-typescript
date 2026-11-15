@@ -50,7 +50,7 @@ describe("morse.quotaState()", () => {
       limit_count: 5000,
       plan_id: "free",
       period_start: "2026-07-01T00:00:00+00:00",
-      upgrade_url: "https://app.morsehq.dev/billing",
+      upgrade_url: "https://app.morseai.dev/billing",
     };
     const fetchImpl = (async () =>
       new Response(JSON.stringify(eventLimitBody), {
