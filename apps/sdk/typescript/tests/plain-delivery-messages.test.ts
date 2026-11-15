@@ -183,6 +183,15 @@ describe("raw error detail is debug-only for explained failures", () => {
       false,
     );
   });
+
+  it("classifies the array forceFlush rejects with", () => {
+    const auth = Object.assign(new Error("Unauthorized"), { code: 401 });
+    const dns = new Error("getaddrinfo ENOTFOUND api.morsehq.dev");
+    expect(diagnostics.isAuthError([auth])).toBe(true);
+    expect(diagnostics.isNetworkError([dns])).toBe(true);
+    expect(diagnostics.isAuthError([])).toBe(false);
+    expect(diagnostics.isNetworkError([dns, new Error("boom")])).toBe(false);
+  });
 });
 
 describe("JSON transport", () => {

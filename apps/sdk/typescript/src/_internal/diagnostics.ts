@@ -143,6 +143,8 @@ const NETWORK_ERROR_PATTERN =
  * carries the real errno there). Never throws.
  */
 export function isNetworkError(err: unknown): boolean {
+  // forceFlush rejects with an array of the processors' errors (MHQ-1838).
+  if (Array.isArray(err)) return err.length > 0 && err.every(isNetworkError);
   try {
     const seen = [err, (err as { cause?: unknown } | null | undefined)?.cause];
     for (const e of seen) {
@@ -158,8 +160,9 @@ export function isNetworkError(err: unknown): boolean {
   return false;
 }
 
-/** True when `err` carries an HTTP 401/403 as its `code` (the `OTLPExporterError` shape). */
+/** True when `err` carries an HTTP 401/403 as its `code` (the `OTLPExporterError` shape), or is an array of such errors. */
 export function isAuthError(err: unknown): boolean {
+  if (Array.isArray(err)) return err.length > 0 && err.every(isAuthError);
   const code = (err as { code?: unknown } | null | undefined)?.code;
   return code === 401 || code === 403;
 }
