@@ -11,7 +11,7 @@ because they are released in lockstep. Expect the numbers to diverge.
 
 ## [Unreleased]
 
-## [0.8.0-rc.1] — 2026-11-19
+## [0.8.0] — 2026-11-19
 
 ### Added — `traceparent` on model calls so a gateway joins the trace (MHQ-1880)
 
