@@ -111,6 +111,7 @@ import { readEnvServiceName } from "./agent-name";
 import { assignPromptRefsToSpans, safeEntries, warnPromptSpanShared } from "./attribution";
 import { redactString, type RedactionConfig } from "./redaction";
 import { SDK_VERSION } from "./transport";
+import { otelSpanIdFor } from "./span-ids";
 
 const INSTRUMENTATION_NAME = "morse-typescript";
 export const DEFAULT_MAX_FIELD_BYTES = 65536;
@@ -1024,7 +1025,7 @@ export function emitTraceEntry(entry: TraceEntryLike): void {
       // Children can finish before their parent; its stable wire ID is known.
       parentCtx = traceApi.setSpanContext(ROOT_CONTEXT, {
         ...syntheticParentContext,
-        spanId: parentIdHex.slice(0, 16),
+        spanId: otelSpanIdFor(parentIdHex),
       });
     }
 
@@ -1038,11 +1039,9 @@ export function emitTraceEntry(entry: TraceEntryLike): void {
 
     try {
       // startSpan is synchronous; clear the override even if span creation fails.
-      const wireSpanId = spanIdHex?.slice(0, 16);
-      eng.idGenerator.nextSpanId =
-        wireSpanId && /^[0-9a-f]{16}$/i.test(wireSpanId) && !/^0+$/.test(wireSpanId)
-          ? wireSpanId
-          : undefined;
+      // MHQ-1880: the exported id is a pure function of the Morse span id, the
+      // same one `propagation.ts` puts in an outgoing `traceparent` header.
+      eng.idGenerator.nextSpanId = spanIdHex ? otelSpanIdFor(spanIdHex) : undefined;
       let otelSpan: OtelSpan;
       try {
         otelSpan = tracer.startSpan(

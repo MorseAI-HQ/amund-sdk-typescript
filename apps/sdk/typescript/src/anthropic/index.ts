@@ -35,6 +35,7 @@ import { absorbErrorsAsync, absorbErrorsSync } from "../_internal/errors";
 import { calculateCost } from "../_internal/pricing";
 import type { ContextSegment, SpanData } from "../_internal/spans";
 import { generateSpanId, nowIso } from "../_internal/spans";
+import { prepareLlmCall } from "../propagation";
 import { setActiveFramework } from "../_internal/active-framework";
 import { captureInputMessages, extractAnthropicOutputText } from "../_internal/llm-io";
 import { applyEndUser } from "../_internal/end-user";
@@ -221,6 +222,13 @@ export interface InstrumentAnthropicOptions {
    * system-prompt content (too many false positives).
    */
   summarize?: boolean;
+  /**
+   * Default `true` (MHQ-1880). Calls made inside an active trace send a W3C
+   * `traceparent` request header naming the call's `llm` span, so a gateway that
+   * forwards it joins the trace. A `traceparent` you set is never replaced.
+   * `false` sends nothing; `MORSE_PROPAGATE_TRACE_CONTEXT=false` does the same globally.
+   */
+  propagateTraceContext?: boolean;
 }
 
 /**
@@ -493,6 +501,12 @@ function spanOptions(params: AnthropicMessageCreateParams) {
   };
 }
 
+/** MHQ-1880: the provider's message id (`msg_...`); the server merges a gateway's record by it. */
+function setResponseId(span: SpanData, id: unknown): void {
+  if (typeof id !== "string" || id === "" || span.metadata?.response_id !== undefined) return;
+  span.metadata = { ...(span.metadata ?? {}), response_id: id };
+}
+
 /** Fill an llm span from a non-streaming Message. Best-effort, never throws. */
 function fillResponseSpan(
   span: SpanData,
@@ -509,6 +523,7 @@ function fillResponseSpan(
       (usage.cache_read_input_tokens ?? 0);
     const outputTokens = usage.output_tokens ?? 0;
     span.model = response?.model ?? params?.model;
+    setResponseId(span, response?.id);
     if (inputTokens > 0) span.input_tokens = inputTokens;
     if (outputTokens > 0) span.output_tokens = outputTokens;
     const cacheWrite = usage.cache_creation_input_tokens ?? 0;
@@ -589,6 +604,7 @@ function buildPatchedCreate(
 ): (params: AnthropicMessageCreateParams, options?: unknown) => Promise<AnthropicMessageResponse> {
   const agentName = options.defaultAgentName;
   const summarizeMode = options.summarize === true;
+  const propagate = options.propagateTraceContext !== false;
 
   return function patchedCreate(
     this: unknown,
@@ -601,7 +617,7 @@ function buildPatchedCreate(
     // Message. Usage arrives in `message_start` / `message_delta`, so the span
     // is recorded when the stream ends, from the accumulated events.
     if (params?.stream === true) {
-      return tracedStreamCreate(this, original, params, callOptions, agentName, inTrace);
+      return tracedStreamCreate(this, original, params, callOptions, agentName, inTrace, propagate);
     }
 
     const startedAt = nowIso();
@@ -650,16 +666,20 @@ function buildPatchedCreate(
 
     let p: Promise<AnthropicMessageResponse>;
     try {
-      p = original.call(this, params, callOptions);
+      // MHQ-1880: the header names this call's llm span (`handle` exists only in a trace).
+      p = original.call(this, params, prepareLlmCall(callOptions, handle?.span.span_id, propagate));
     } catch (err) {
       settle(undefined, err);
       throw err;
     }
-    onRejected(p, (err) => settle(undefined, err));
-    return mapKeepingShape(p, (response) => {
+    // Observe the promise handed back, not `p`: a second `.then` on the SDK's
+    // APIPromise parses the body again ("Body is unusable"). OpenAI's wrapper does the same.
+    const out = mapKeepingShape(p, (response) => {
       settle(response, undefined);
       return response;
     }) as Promise<AnthropicMessageResponse>;
+    onRejected(out, (err) => settle(undefined, err));
+    return out;
   };
 }
 
@@ -669,6 +689,7 @@ function buildPatchedCreate(
 
 interface StreamAccumulator {
   model?: string;
+  responseId?: string;
   inputTokens: number;
   outputTokens: number;
   cacheWrite: number;
@@ -683,7 +704,7 @@ function numOr(v: unknown, fallback: number): number {
 
 interface RawStreamEvent {
   type?: unknown;
-  message?: { model?: unknown; usage?: Record<string, unknown> };
+  message?: { id?: unknown; model?: unknown; usage?: Record<string, unknown> };
   usage?: Record<string, unknown>;
   delta?: { type?: unknown; text?: unknown; stop_reason?: unknown };
 }
@@ -695,6 +716,7 @@ function accumulateStreamEvent(acc: StreamAccumulator, event: unknown): void {
     const e = event as RawStreamEvent;
     if (e.type === "message_start" && e.message) {
       if (typeof e.message.model === "string") acc.model = e.message.model;
+      if (typeof e.message.id === "string" && e.message.id !== "") acc.responseId = e.message.id;
       const u = e.message.usage ?? {};
       acc.inputTokens = numOr(u.input_tokens, acc.inputTokens);
       acc.outputTokens = numOr(u.output_tokens, acc.outputTokens);
@@ -724,6 +746,7 @@ function fillStreamSpan(
   error: unknown,
 ): void {
   span.model = acc.model ?? params?.model;
+  setResponseId(span, acc.responseId);
   const inputTokens = acc.inputTokens + acc.cacheWrite + acc.cacheRead;
   if (inputTokens > 0) span.input_tokens = inputTokens;
   if (acc.outputTokens > 0) span.output_tokens = acc.outputTokens;
@@ -826,6 +849,7 @@ function tracedStreamCreate(
   callOptions: unknown,
   agentName: string | undefined,
   inTrace: boolean,
+  propagate: boolean,
 ): Promise<AnthropicMessageResponse> {
   const startedAt = nowIso();
   const startMs = Date.now();
@@ -868,7 +892,7 @@ function tracedStreamCreate(
 
   let p: Promise<AnthropicMessageResponse>;
   try {
-    p = original.call(self, params, callOptions);
+    p = original.call(self, params, prepareLlmCall(callOptions, detached?.span.span_id, propagate));
   } catch (err) {
     record(err);
     throw err;

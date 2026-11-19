@@ -191,6 +191,30 @@ export function extractLangChainOutputText(
   return truncateText(parts.join("\n"), maxBytes);
 }
 
+/**
+ * The provider's id for a LangChain call (MHQ-1880): `response_metadata.id` of the
+ * first generation's message (Anthropic `msg_...`, OpenAI `chatcmpl-...`), else
+ * `llmOutput.id`. `message.id` is never used: LangChain may fill it with its own
+ * run id. Streamed calls usually expose neither; `traceparent` covers those.
+ */
+export function extractLangChainResponseId(result: unknown): string | undefined {
+  try {
+    const r = result as {
+      generations?: unknown;
+      llmOutput?: { id?: unknown } | null;
+    } | null;
+    const gens = r?.generations;
+    const first = Array.isArray(gens) && Array.isArray(gens[0]) ? gens[0][0] : undefined;
+    const meta = (first as { message?: { response_metadata?: { id?: unknown } } } | undefined)
+      ?.message?.response_metadata;
+    if (typeof meta?.id === "string" && meta.id !== "") return meta.id;
+    const outId = r?.llmOutput?.id;
+    return typeof outId === "string" && outId !== "" ? outId : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
 function safeJson(value: unknown): string {
   try {
     return JSON.stringify(value) ?? String(value);

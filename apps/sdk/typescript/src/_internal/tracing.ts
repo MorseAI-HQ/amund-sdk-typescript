@@ -62,6 +62,7 @@ import {
 } from "./attribution";
 import { isLegacyTransport, isValidInternalSource } from "./env";
 import { emitTraceEntry, isOtelAvailable, withOtelSpanContext } from "./otel-provider";
+import { otelSpanIdFor } from "./span-ids";
 import { report, setRedactionConfig as setDiagnosticsRedactionConfig } from "./diagnostics";
 import { buildRedactionConfig, type RedactionConfig, redactValue } from "./redaction";
 import { getGitRevision, getServiceVersion } from "./revision";
@@ -553,7 +554,7 @@ function withDbCaptureContext<T>(traceId: string, spanIdHex: string, fn: () => T
     // OTel SpanId is 64-bit (16 hex chars); Morse's span_id is 128-bit
     // (32 hex chars) — same truncation convention `spans.ts::generateSpanId`
     // documents for W3C traceparent interop.
-    return withOtelSpanContext(traceId, spanIdHex.slice(0, 16), fn);
+    return withOtelSpanContext(traceId, otelSpanIdFor(spanIdHex), fn);
   } catch {
     return fn();
   }
