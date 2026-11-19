@@ -69,7 +69,7 @@ import type { SpanHandle } from "../_internal/tracing";
 import { adoptFrameworkRoot, adoptThreadId, startSpan, withParentSpan } from "../_internal/tracing";
 import { isLegacyIdentity } from "../_internal/agent-name";
 import { decomposeOpenAiMessages } from "../_agent-sdk-common/context-decomposer";
-import { captureLangChainMessages } from "../_internal/llm-io";
+import { captureLangChainMessages, extractLangChainResponseId } from "../_internal/llm-io";
 import type {
   BaseMessageLike,
   CallbackHandlerSurface,
@@ -767,6 +767,11 @@ const _handleLLMEnd = absorbErrorsSync(
       const resolvedModel = extractModel(response);
       if (resolvedModel) {
         handle.span.model = resolvedModel;
+      }
+      // MHQ-1880: the provider's response id, so the server can merge a gateway's record.
+      const responseId = extractLangChainResponseId(response);
+      if (responseId !== undefined) {
+        handle.span.metadata = { ...(handle.span.metadata ?? {}), response_id: responseId };
       }
       // NOTE: cost computation (calculate_cost / merge_provider_reported_cost
       // in the Python adapter) intentionally omitted — no TS pricing module

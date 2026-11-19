@@ -127,6 +127,7 @@ export {
   injectIntoRequestInit,
   W3C_TRACEPARENT_HEADER,
 } from "./propagation";
+import { setPropagateDefault } from "./propagation";
 export {
   extractAnthropicSegments,
   instrumentAnthropic,
@@ -207,6 +208,15 @@ export interface InitOptions {
    * no-op in browser bundles. Mirrors Python's `init(capture_end_user=...)`.
    */
   captureEndUser?: boolean;
+  /**
+   * Default `true`. Anthropic and OpenAI calls made inside an active trace send one
+   * extra request header, `traceparent`, naming the call's `llm` span so a gateway
+   * (LiteLLM) that forwards it lands in the same trace and its record of the call is
+   * merged with the SDK's instead of counted twice. Nothing else is sent. Set `false`
+   * to send nothing (also: `MORSE_PROPAGATE_TRACE_CONTEXT=false`). A `traceparent`
+   * you set on a call is never replaced. Mirrors Python's `init(propagate_trace_context=...)`.
+   */
+  propagateTraceContext?: boolean;
 }
 
 /** Single agent-run payload accepted by `track()`. */
@@ -454,6 +464,7 @@ export function init(options: InitOptions = {}): void {
   // singleton state, so a misconfigured init leaves the previous client
   // intact and the spec scenario "no Client is constructed" holds.
   const redaction = buildRedactionConfig(options.redaction);
+  setPropagateDefault(options.propagateTraceContext);
 
   try {
     if (singleton !== null) {
@@ -831,6 +842,7 @@ export function _resetForTesting(): void {
   _resetDiagnosticsForTesting();
   _resetAutoDetectForTesting();
   _resetQuotaStateForTesting();
+  setPropagateDefault(undefined);
   // Reset the transport factory back to the default.
   transportFactory = (opts) => new BatchTransport(opts);
 }

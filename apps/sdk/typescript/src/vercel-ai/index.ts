@@ -57,7 +57,7 @@ import {
   startDetachedSpan,
 } from "../_internal/tracing";
 import { calculateCost } from "../_internal/pricing";
-import { injectTraceparent } from "../propagation";
+import { injectTraceparent, prepareLlmCall, propagationEnabled } from "../propagation";
 import { decomposeOpenAiMessages } from "../_agent-sdk-common/context-decomposer";
 import { emitLlmSpan } from "../_agent-sdk-common/span-emitter";
 import { captureInputMessages, truncateText } from "../_internal/llm-io";
@@ -98,6 +98,13 @@ export interface InstrumentVercelAIOptions {
    * `"vercel-ai.<primitive>"` (e.g., `"vercel-ai.streamText"`).
    */
   defaultAgentName?: string;
+  /**
+   * Default `true` (MHQ-1880). Calls made inside an active trace pass a W3C
+   * `traceparent` in the call's `headers` option, naming the `llm` span, so a gateway
+   * that forwards it joins the trace. A `traceparent` you set is never replaced.
+   * `false` sends nothing; `MORSE_PROPAGATE_TRACE_CONTEXT=false` does the same globally.
+   */
+  propagateTraceContext?: boolean;
 }
 
 /** The traced replacement functions returned by {@link createTracedVercelAI}. */
@@ -260,6 +267,28 @@ function applyOutput(handle: FinalizeHandle, text: unknown, object?: unknown): v
 }
 
 /**
+ * MHQ-1880: `args` with `headers.traceparent` added to the first (options) argument,
+ * naming `spanId`. The caller's options object is copied, never mutated; returns
+ * `args` itself when nothing is added.
+ */
+function argsWithTraceparent(
+  args: unknown[],
+  spanId: string | undefined,
+  propagate: boolean,
+): unknown[] {
+  try {
+    const first = args[0];
+    if (!first || typeof first !== "object") return args;
+    const base = { headers: (first as { headers?: unknown }).headers };
+    const prepared = prepareLlmCall(base, spanId, propagate) as { headers?: unknown };
+    if (prepared === base) return args;
+    return [{ ...(first as object), headers: prepared.headers }, ...args.slice(1)];
+  } catch {
+    return args;
+  }
+}
+
+/**
  * Wrap `streamText`. Vercel's `streamText` returns synchronously with
  * a result object whose properties are streams / promises (`textStream`,
  * `text`, `usage`, `finishReason`, etc.). We start the llm span when
@@ -280,6 +309,7 @@ function wrapStreamText(
   options: InstrumentVercelAIOptions,
 ): (...args: unknown[]) => unknown {
   const agentName = options.defaultAgentName;
+  const propagate = options.propagateTraceContext !== false;
 
   return function patchedStreamText(...args: unknown[]): unknown {
     // If we're already inside a trace, just emit a child llm span and
@@ -306,7 +336,7 @@ function wrapStreamText(
     if (inTrace) {
       const handle = openLlmSpan();
       try {
-        const result = original(...args);
+        const result = original(...argsWithTraceparent(args, handle?.span.span_id, propagate));
         const release = holdTraceOpen();
         void attachStreamingFinalize(result, handle).then(() => release?.());
         return result;
@@ -325,7 +355,7 @@ function wrapStreamText(
     void _runAsync({ agentName }, async (runHandle) => {
       const handle = openLlmSpan();
       try {
-        result = original(...args);
+        result = original(...argsWithTraceparent(args, handle?.span.span_id, propagate));
       } catch (err) {
         handle?.end(err);
         threw = true;
@@ -347,6 +377,7 @@ function wrapStreamText(
 
 interface FinalizeHandle {
   span: {
+    span_id?: string;
     model?: string;
     context_segments?: unknown;
     input_tokens?: number;
@@ -510,6 +541,7 @@ function wrapGenerate(
   options: InstrumentVercelAIOptions,
 ): (...args: unknown[]) => unknown {
   const agentName = options.defaultAgentName;
+  const propagate = options.propagateTraceContext !== false;
 
   return function patched(...args: unknown[]): unknown {
     const callArgs = (args[0] ?? {}) as CallArgs;
@@ -528,7 +560,9 @@ function wrapGenerate(
         if (contextSegments.length > 0) handle.span.context_segments = contextSegments;
       }
       try {
-        const result = await (original(...args) as Promise<unknown>);
+        const result = await (original(
+          ...argsWithTraceparent(args, handle?.span.span_id, propagate),
+        ) as Promise<unknown>);
         if (result && typeof result === "object" && handle) {
           const r = result as Record<string, unknown>;
           applyUsage(handle, r.usage);
@@ -567,6 +601,8 @@ function wrapFetch(original: typeof globalThis.fetch): typeof globalThis.fetch {
     }
     try {
       const merged = new Headers(init?.headers ?? {});
+      // MHQ-1880: opt-out applies here too, and a caller's own header is kept.
+      if (!propagationEnabled() || merged.has("traceparent")) return original(input, init);
       injectTraceparent(merged);
       const next = { ...(init ?? {}), headers: merged };
       return original(input, next);

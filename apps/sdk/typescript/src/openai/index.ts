@@ -58,6 +58,7 @@ import {
 } from "../_internal/tracing";
 import { report } from "../_internal/diagnostics";
 import { applyEndUser } from "../_internal/end-user";
+import { prepareLlmCall } from "../propagation";
 
 /* ------------------------------------------------------------------------ */
 /*  Public types — minimal structural shapes, NOT a hard dep on `openai`     */
@@ -183,6 +184,13 @@ export interface WrapOpenAiOptions {
    * to `"openai.chat.completions.create"`.
    */
   defaultAgentName?: string;
+  /**
+   * Default `true` (MHQ-1880). Calls made inside an active trace send a W3C
+   * `traceparent` request header naming the call's `llm` span, so a gateway that
+   * forwards it joins the trace. A `traceparent` you set is never replaced.
+   * `false` sends nothing; `MORSE_PROPAGATE_TRACE_CONTEXT=false` does the same globally.
+   */
+  propagateTraceContext?: boolean;
 }
 
 /**
@@ -521,6 +529,7 @@ function buildPatchedCreate(
   api: ApiKind,
 ): AnyCreate {
   const agentName = options.defaultAgentName;
+  const propagate = options.propagateTraceContext !== false;
   const isResponses = api === "responses";
   const spanName = isResponses ? "openai.responses.create" : "openai.chat.completions.create";
   const ownTraceName = isResponses ? (agentName ?? spanName) : agentName;
@@ -586,7 +595,8 @@ function buildPatchedCreate(
 
     let p: Promise<any>;
     try {
-      p = original.call(this, params, callOptions);
+      // MHQ-1880: the header names this call's llm span (`handle` exists only in a trace).
+      p = original.call(this, params, prepareLlmCall(callOptions, handle?.span.span_id, propagate));
     } catch (err) {
       settle(undefined, err);
       throw err;

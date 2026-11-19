@@ -11,6 +11,33 @@ because they are released in lockstep. Expect the numbers to diverge.
 
 ## [Unreleased]
 
+### Added — `traceparent` on model calls so a gateway joins the trace (MHQ-1880)
+
+- Anthropic (`messages.create`, `create({ stream: true })`, `messages.stream`, also under the
+  zero-config prototype patch) and OpenAI (`chat.completions.create`, `responses.create`, stream
+  or not) calls made through a wrapped client inside an active trace now send one extra HTTP
+  request header: `traceparent: 00-<trace id, 32 hex>-<span id, 16 hex>-<01|00>`. The span id is
+  the call's `llm` span, and the exported OTLP span now uses that same id, so a gateway (LiteLLM)
+  that forwards the header produces a span that is a child of it and the server merges the two
+  records of one call. `createTracedVercelAI()` calls send it in the call's `headers` option.
+- Nothing else is sent. No header goes out with no active trace, and a `traceparent` you set
+  (any header-name case) is never replaced; your options and headers objects are copied, not changed.
+- Opt out: `MORSE_PROPAGATE_TRACE_CONTEXT=false` (or `0`), `init({ propagateTraceContext: false })`,
+  or `{ propagateTraceContext: false }` on `wrapAnthropic` / `wrapOpenAI` / `createTracedVercelAI`.
+- Exported span ids are the first 64 bits of Morse's span id (as DB captures already used) for
+  every span, instead of random ones. `injectTraceparent` now names the same id and carries the
+  real sampling flag (`00` when `MORSE_SAMPLE_RATE` drops the trace) instead of always `01`.
+
+### Fixed — the provider's response id is recorded on Anthropic and LangChain `llm` spans (MHQ-1880)
+
+- Anthropic calls (including streams, from `message_start`) and LangChain / LangGraph calls now
+  record `metadata.response_id` (`msg_...`, `chatcmpl-...`; LangChain from
+  `response_metadata.id`, never the message's own id). The server uses it to merge a gateway's
+  record of the same call when the two arrive in separate traces. LangChain does not expose the
+  id for streamed calls; `traceparent` covers those.
+- `wrapAnthropic` non-streaming calls no longer read the SDK response body twice ("Body is
+  unusable") when the real `@anthropic-ai/sdk` client is wrapped.
+
 ## [0.7.2] — 2026-11-15
 
 ### Changed — default endpoint moves to morseai.dev

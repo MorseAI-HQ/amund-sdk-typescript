@@ -40,6 +40,7 @@ import {
   captureLangChainMessages,
   capturePrompts,
   extractLangChainOutputText,
+  extractLangChainResponseId,
 } from "../_internal/llm-io";
 import { summarizeToolInput, summarizeToolOutput } from "../_agent-sdk-common/redaction";
 import { decomposeOpenAiMessages } from "../_agent-sdk-common/context-decomposer";
@@ -322,6 +323,12 @@ export function createLlmAndToolHandlers(
       // output_data is set here rather than on the emitLlmSpan above.
       const outputText = extractLangChainOutputText(output?.generations);
       if (outputText !== undefined) handle.span.output_data = { content: outputText };
+      // MHQ-1880: the provider's response id, so the server can merge a gateway's record.
+      const responseId = extractLangChainResponseId(output);
+      if (responseId !== undefined) {
+        const md = (handle.span.metadata ??= {} as Record<string, unknown>);
+        md.response_id = responseId;
+      }
     });
   };
 
