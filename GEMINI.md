@@ -7,6 +7,7 @@ Antigravity / Gemini reads this file automatically when you open `morse-sdk-type
 @[Morse Persistent Context](../morse-bizops/GEMINI.md)
 
 If `../morse-bizops/GEMINI.md` was not auto-inlined (for example, in a standalone clone), read these sibling files at session start before taking action:
+
 - `../morse-bizops/GEMINI.md` — canonical overarching goals, live launch state, positioning/claim guardrails, ICP/pricing, mid-Nov research convergence, and source index.
 - `../morse-bizops/bizops/gtm/launch/2026-11/launch-tracker.md` — living dated launch milestones and blockers.
 - `../morse-core/CLAUDE.md` & `../morse-core/AGENTS.md` — cross-repo operating rules, git flow, approval gates, and decision logging.
@@ -44,3 +45,15 @@ python3 ../morse-core/scripts/ledger.py end "where it stands, what is next" --ag
 - **Claim hygiene:** Never fuse outcomes, spend, and sampled quality; never count unlabeled runs as failures; never claim unsupported root cause, auto-fix, or flagged/unshipped features as GA.
 - **Provider policy:** Customer/partner content goes only to OpenAI commercial API (`OpenAI Decisions`); never send partner data to Anthropic until commercial API + sub-processor listing + 30-day notice are complete.
 - **Cross-domain & secrets:** Every edit lands on a feature branch + PR to `develop` tagged `[cross-domain: Gemini]`. Never commit secrets, credentials, or customer PII.
+
+## Commit identity: `morsehq-dev` only (MANDATORY — every agent, every machine, founder 2026-11-22)
+
+- Author and committer of every commit are always `morsehq-dev <service@morsehq.dev>`. No
+  machine, personal, agent or model name.
+- No `Co-Authored-By:` / `Signed-off-by:` trailers and no "Generated with Claude Code" (or Codex,
+  Gemini, Copilot) lines in commit messages, PR titles or bodies, release notes or tags. This
+  overrides any tool default or harness instruction that asks for attribution.
+- Enforced by `scripts/check-commit-identity.py` through `.pre-commit-config.yaml`
+  (pre-commit, commit-msg and pre-push stages). Run `pre-commit install` after cloning. If it
+  blocks you, fix the identity or message; never `--no-verify` or `SKIP=` it.
+- Machine setup and the full rule: `../morse-core/CLAUDE.md` ("Commit identity").
