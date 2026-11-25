@@ -23,7 +23,7 @@ interface WireSpan {
   output_tokens?: number;
   total_tokens?: number;
   // Added by #480 alongside the cost assertions below, but not here — so
-  // `pnpm --filter @amund/sdk type-check` has been failing on develop ever
+  // `pnpm --filter @amundai/sdk type-check` has been failing on develop ever
   // since, and that command gates the npm publish job.
   cost_usd?: number;
   status?: string;

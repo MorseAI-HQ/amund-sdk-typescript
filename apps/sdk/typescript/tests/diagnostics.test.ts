@@ -142,11 +142,11 @@ describe("SDKDIAG-02: payload scoping", () => {
     expect(stack[2]).toEqual({ elided: 1 });
   });
 
-  it("recognises frames from the @amund/sdk install path (the post-rebrand published name)", () => {
+  it("recognises frames from the @amundai/sdk install path (the post-rebrand published name)", () => {
     const err = new Error("boom");
     err.stack = [
       "Error: boom",
-      "    at redactValue (/app/node_modules/@amund/sdk/dist/chunk-ELBY4SJ7.js:249:35)",
+      "    at redactValue (/app/node_modules/@amundai/sdk/dist/chunk-ELBY4SJ7.js:249:35)",
       "    at handler (/srv/app/routes/checkout.js:12:3)",
       "    at pay (/home/amund/app/src/billing.js:9:1)",
     ].join("\n");

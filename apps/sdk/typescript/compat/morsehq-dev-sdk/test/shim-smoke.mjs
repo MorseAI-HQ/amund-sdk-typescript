@@ -1,9 +1,9 @@
 /**
  * `@morsehq-dev/sdk` shim checks (node:test). Needs both builds first:
- *   pnpm --filter @amund/sdk build && pnpm --filter @morsehq-dev/sdk build
+ *   pnpm --filter @amundai/sdk build && pnpm --filter @morsehq-dev/sdk build
  *
  * Proves, for EVERY subpath in the exports map, that the shim resolves under
- * ESM and CJS and hands back the very same module instances as `@amund/sdk`,
+ * ESM and CJS and hands back the very same module instances as `@amundai/sdk`,
  * and that the deprecation notice prints exactly once per process (and not at
  * all when the user has switched warnings / the SDK off).
  */
@@ -27,13 +27,13 @@ const SUBPATHS = Object.keys(shimPkg.exports)
 
 const MESSAGE_MARK = "@morsehq-dev/sdk is deprecated";
 
-test("package.json mirrors @amund/sdk (exports, version, entry fields)", () => {
-  assert.equal(sdkPkg.name, "@amund/sdk");
+test("package.json mirrors @amundai/sdk (exports, version, entry fields)", () => {
+  assert.equal(sdkPkg.name, "@amundai/sdk");
   assert.equal(shimPkg.name, "@morsehq-dev/sdk");
   assert.deepEqual(shimPkg.exports, sdkPkg.exports);
   assert.equal(shimPkg.version, sdkPkg.version);
   for (const k of ["main", "module", "types"]) assert.equal(shimPkg[k], sdkPkg[k]);
-  assert.equal(shimPkg.dependencies["@amund/sdk"], "workspace:*");
+  assert.equal(shimPkg.dependencies["@amundai/sdk"], "workspace:*");
   assert.ok(SUBPATHS.length >= 9, `expected >= 9 subpaths, got ${SUBPATHS.length}`);
 });
 
@@ -46,18 +46,18 @@ test("every file the exports map names exists in the shim build", () => {
 });
 
 for (const sub of SUBPATHS) {
-  test(`ESM: @morsehq-dev/sdk${sub} === @amund/sdk${sub}`, async () => {
+  test(`ESM: @morsehq-dev/sdk${sub} === @amundai/sdk${sub}`, async () => {
     const shim = await import(`@morsehq-dev/sdk${sub}`);
-    const real = await import(`@amund/sdk${sub}`);
+    const real = await import(`@amundai/sdk${sub}`);
     const keys = Object.keys(real).sort();
-    assert.ok(keys.length > 0, `@amund/sdk${sub} exported nothing`);
+    assert.ok(keys.length > 0, `@amundai/sdk${sub} exported nothing`);
     assert.deepEqual(Object.keys(shim).sort(), keys);
     for (const k of keys) assert.equal(shim[k], real[k], `${sub || "."}: ${k} is a different instance`);
   });
 
-  test(`CJS: require("@morsehq-dev/sdk${sub}") is require("@amund/sdk${sub}")`, () => {
+  test(`CJS: require("@morsehq-dev/sdk${sub}") is require("@amundai/sdk${sub}")`, () => {
     const shim = require(`@morsehq-dev/sdk${sub}`);
-    const real = require(`@amund/sdk${sub}`);
+    const real = require(`@amundai/sdk${sub}`);
     assert.equal(shim, real);
   });
 }
@@ -91,7 +91,7 @@ const IMPORT_EVERYTHING = `
 test("deprecation notice prints exactly once across all subpaths, ESM + CJS", () => {
   const warns = JSON.parse(runChild(IMPORT_EVERYTHING));
   assert.equal(warns.length, 1, JSON.stringify(warns));
-  assert.match(warns[0], /@amund\/sdk/);
+  assert.match(warns[0], /@amundai\/sdk/);
 });
 
 for (const [label, opts] of [

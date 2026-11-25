@@ -317,8 +317,8 @@ export function checkRateLimit(fingerprint: string): boolean {
  * the customer's file layout.
  *
  * **Every package name the SDK code has ever shipped under must be listed.**
- * Since the Amund rebrand the package is published as `@amund/sdk` (also the in-repo
- * workspace name), so customer installs live at `@amund/sdk/...`. Older
+ * Since the Amund rebrand the package is published as `@amundai/sdk` (also the in-repo
+ * workspace name), so customer installs live at `@amundai/sdk/...`. Older
  * installs live at `@morsehq-dev/sdk/...` (the pre-rebrand npm name, which
  * is now shipped only as a re-export shim) and older checkouts used the
  * workspace name `@morsehq/sdk`. `amund-sdk` / `morse-sdk` cover repo checkouts.
@@ -333,7 +333,7 @@ export function checkRateLimit(fingerprint: string): boolean {
  * name must not cause their frames to be transmitted in full.
  */
 const MORSE_PATH_MARKERS = [
-  "@amund/sdk",
+  "@amundai/sdk",
   "@morsehq/sdk",
   "@morsehq-dev/sdk",
   "amund-sdk",

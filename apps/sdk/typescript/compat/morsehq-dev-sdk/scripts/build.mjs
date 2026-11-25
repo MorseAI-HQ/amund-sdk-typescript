@@ -2,22 +2,22 @@
 /**
  * Build the `@morsehq-dev/sdk` compatibility shim.
  *
- * The shim's `exports` map is a byte-for-byte copy of `@amund/sdk`'s. For
+ * The shim's `exports` map is a byte-for-byte copy of `@amundai/sdk`'s. For
  * every file that map points at, this script writes a one-line re-export of
- * the matching `@amund/sdk` subpath:
+ * the matching `@amundai/sdk` subpath:
  *
- *   *.d.ts  -> `export * from "@amund/sdk/<sub>";`
+ *   *.d.ts  -> `export * from "@amundai/sdk/<sub>";`
  *   *.js    -> side-effect import of the deprecation notice, then
- *              `export * from "@amund/sdk/<sub>";`            (import / browser / default)
+ *              `export * from "@amundai/sdk/<sub>";`            (import / browser / default)
  *   *.cjs   -> require the deprecation notice, then
- *              `module.exports = require("@amund/sdk/<sub>");` (require)
+ *              `module.exports = require("@amundai/sdk/<sub>");` (require)
  *
  * Re-exporting (never copying code) is what keeps `@morsehq-dev/sdk` and
- * `@amund/sdk` the SAME module instances: one SDK singleton, one transport.
- * The browser condition re-exports the bare `@amund/sdk/<sub>` specifier, so
- * the customer's bundler resolves `@amund/sdk`'s own browser build.
+ * `@amundai/sdk` the SAME module instances: one SDK singleton, one transport.
+ * The browser condition re-exports the bare `@amundai/sdk/<sub>` specifier, so
+ * the customer's bundler resolves `@amundai/sdk`'s own browser build.
  *
- * Fails (exit 1) if the shim's package.json drifted from `@amund/sdk`
+ * Fails (exit 1) if the shim's package.json drifted from `@amundai/sdk`
  * (exports map or version). `--write` re-syncs package.json instead.
  */
 import { copyFileSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
@@ -31,7 +31,7 @@ const SDK_DIR = resolve(SHIM_DIR, "../..");
 const sdkPkg = JSON.parse(readFileSync(join(SDK_DIR, "package.json"), "utf8"));
 const shimPkgPath = join(SHIM_DIR, "package.json");
 const shimPkg = JSON.parse(readFileSync(shimPkgPath, "utf8"));
-const TARGET = sdkPkg.name; // "@amund/sdk"
+const TARGET = sdkPkg.name; // "@amundai/sdk"
 
 const problems = [];
 if (JSON.stringify(shimPkg.exports) !== JSON.stringify(sdkPkg.exports)) {

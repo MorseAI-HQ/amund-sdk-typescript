@@ -1,5 +1,5 @@
 {
-  "name": "@amund/sdk",
+  "name": "@amundai/sdk",
   "version": "0.8.1-rc.1",
   "description": "Amund SDK: unified observability for AI agents and infrastructure. One SDK.",
   "license": "MIT",

@@ -1,5 +1,5 @@
 /**
- * Public API tests for `@amund/sdk`.
+ * Public API tests for `@amundai/sdk`.
  *
  * Covers:
  *   - Module-level singleton API surface (init, track, batchTrack, record,

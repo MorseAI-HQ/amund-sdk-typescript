@@ -1,7 +1,7 @@
 /**
  * `pnpm pack:published`: since the Amund rebrand a release packs and publishes TWO
  * packages under their in-repo names, with no rename step:
- *   - `@amund/sdk` (this package)
+ *   - `@amundai/sdk` (this package)
  *   - `@morsehq-dev/sdk` (compat/morsehq-dev-sdk, a re-export shim)
  * The shim's runtime behaviour is covered by compat/morsehq-dev-sdk/test and
  * scripts/smoke-packed.mjs (both need a build); this file keeps the cheap
@@ -34,10 +34,10 @@ afterEach(() => {
 const readJson = (p: string) => JSON.parse(readFileSync(p, "utf8"));
 
 describe("pack:published", () => {
-  it("publishes the SDK as @amund/sdk and the shim as @morsehq-dev/sdk", () => {
-    expect(publishedPackageName()).toBe("@amund/sdk");
+  it("publishes the SDK as @amundai/sdk and the shim as @morsehq-dev/sdk", () => {
+    expect(publishedPackageName()).toBe("@amundai/sdk");
     expect(publishedPackageName(SHIM_DIR)).toBe("@morsehq-dev/sdk");
-    expect(tarballName("@amund/sdk", "0.8.0")).toBe("amund-sdk-0.8.0.tgz");
+    expect(tarballName("@amundai/sdk", "0.8.0")).toBe("amundai-sdk-0.8.0.tgz");
   });
 
   it("the release workflow no longer rewrites the package name", () => {
@@ -74,7 +74,7 @@ describe("pack:published", () => {
   }, 60_000); // shells out to `pnpm pack`, slow on a loaded CI runner
 });
 
-describe("@morsehq-dev/sdk shim stays in lockstep with @amund/sdk", () => {
+describe("@morsehq-dev/sdk shim stays in lockstep with @amundai/sdk", () => {
   const sdk = readJson(join(SDK_DIR, "package.json"));
   const shim = readJson(join(SHIM_DIR, "package.json"));
 
@@ -84,11 +84,11 @@ describe("@morsehq-dev/sdk shim stays in lockstep with @amund/sdk", () => {
     for (const k of ["main", "module", "types", "type"]) expect(shim[k]).toBe(sdk[k]);
   });
 
-  it("has the same version and depends on exactly that @amund/sdk", () => {
+  it("has the same version and depends on exactly that @amundai/sdk", () => {
     expect(shim.version).toBe(sdk.version);
     // `pnpm pack` turns workspace:* into the exact version (checked on the
     // real tarball by scripts/smoke-packed.mjs).
-    expect(shim.dependencies).toEqual({ "@amund/sdk": "workspace:*" });
+    expect(shim.dependencies).toEqual({ "@amundai/sdk": "workspace:*" });
   });
 
   it("is publishable and ships only dist/", () => {

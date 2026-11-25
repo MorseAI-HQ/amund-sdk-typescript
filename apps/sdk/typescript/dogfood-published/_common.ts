@@ -1,9 +1,9 @@
 /**
  * Published-package variant of apps/sdk/typescript/dogfood/_common.ts.
- * Imports ONLY the public entrypoints of the npm-published @amund/sdk —
+ * Imports ONLY the public entrypoints of the npm-published @amundai/sdk —
  * no workspace source, no internal modules.
  */
-import * as morse from "@amund/sdk";
+import * as morse from "@amundai/sdk";
 
 export const DEV_ENDPOINT_DEFAULT = "https://dev-api.morsehq.dev/api/v1/traces/batch";
 

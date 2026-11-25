@@ -1,7 +1,7 @@
 /**
  * INFRACAP-10 — overhead of default-on infra capture (TypeScript SDK).
  *
- *     pnpm --filter @amund/sdk bench:infra     # tsx benchmarks/infra-capture-overhead.ts
+ *     pnpm --filter @amundai/sdk bench:infra     # tsx benchmarks/infra-capture-overhead.ts
  *
  * Same two questions and the same fixed thresholds as the Python benchmark:
  *

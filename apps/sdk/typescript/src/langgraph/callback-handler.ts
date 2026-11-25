@@ -1,10 +1,10 @@
 /**
- * `@amund/sdk/langgraph` — `MorseCallbackHandler` (W2-L.1).
+ * `@amundai/sdk/langgraph` — `MorseCallbackHandler` (W2-L.1).
  *
  * The handler is registered by LangGraph users via:
  *
  * ```ts
- * import { MorseCallbackHandler } from "@amund/sdk/langgraph";
+ * import { MorseCallbackHandler } from "@amundai/sdk/langgraph";
  * await app.invoke(input, { callbacks: [new MorseCallbackHandler()] });
  * ```
  *

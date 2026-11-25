@@ -1,6 +1,6 @@
 import OpenAI from "openai";
-import { runTraced } from "@amund/sdk";
-import { wrapOpenAI } from "@amund/sdk/openai";
+import { runTraced } from "@amundai/sdk";
+import { wrapOpenAI } from "@amundai/sdk/openai";
 import { requireEnv, runDogfood } from "./_common.js";
 
 async function main() {

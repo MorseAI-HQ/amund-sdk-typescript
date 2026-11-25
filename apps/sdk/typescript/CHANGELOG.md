@@ -1,6 +1,6 @@
 # Changelog
 
-All notable changes to `@amund/sdk` (published as `@morsehq-dev/sdk` through 0.8.0) are
+All notable changes to `@amundai/sdk` (published as `@morsehq-dev/sdk` through 0.8.0) are
 documented here.
 
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
@@ -12,19 +12,19 @@ because they are released in lockstep. Expect the numbers to diverge.
 
 ## [Unreleased]
 
-### Changed — published as `@amund/sdk` (Morse is now Amund)
+### Changed — published as `@amundai/sdk` (Morse is now Amund)
 
-- **The package is now `@amund/sdk`** (npm org `amund`, founder decision 2026-11-25). The
+- **The package is now `@amundai/sdk`** (npm org `amundai`, founder decision 2026-11-25; the `@amund` scope belongs to another npm user). The
   in-repo workspace name is the published name, so the release workflow no longer rewrites
   `package.json`. Migrate by swapping the dependency and replacing `@morsehq-dev/sdk` with
-  `@amund/sdk` in imports; every subpath (`/anthropic`, `/openai`, `/vercel-ai`, …) and the
+  `@amundai/sdk` in imports; every subpath (`/anthropic`, `/openai`, `/vercel-ai`, …) and the
   whole API are unchanged.
 - **`@morsehq-dev/sdk` keeps working** as a compatibility package
   (`compat/morsehq-dev-sdk/`), released at the same version and depending on exactly that
-  `@amund/sdk` version. Its `exports` map is a copy of `@amund/sdk`'s (ESM, CJS, types and
+  `@amundai/sdk` version. Its `exports` map is a copy of `@amundai/sdk`'s (ESM, CJS, types and
   `browser` conditions); every entry point is a one-line re-export, so both names hand back
   the same module instances (one SDK singleton, one transport). Importing it prints one
-  deprecation notice per process naming `@amund/sdk`; the notice stays quiet under
+  deprecation notice per process naming `@amundai/sdk`; the notice stays quiet under
   `NODE_NO_WARNINGS=1`, `--no-deprecation`, or `AMUND_DISABLED` / `MORSE_DISABLED`.
 - **Environment variables are `AMUND_*`, with `MORSE_*` still read.** Every variable the SDK
   reads (`AMUND_API_KEY`, `AMUND_ENDPOINT`, `AMUND_DISABLED`, `AMUND_CAPTURE_*`,
@@ -34,7 +34,7 @@ because they are released in lockstep. Expect the numbers to diverge.
   change. The lookup lives in one helper (`_internal/env.ts::readSdkEnv`).
 - Local warnings name the product as Amund and the key variable as `AMUND_API_KEY` (or
   `MORSE_API_KEY`). The `morse:` log prefix is unchanged.
-- Self-diagnostics recognise stack frames under `node_modules/@amund/sdk/` as SDK frames (the
+- Self-diagnostics recognise stack frames under `node_modules/@amundai/sdk/` as SDK frames (the
   old `@morsehq-dev/sdk` and `@morsehq/sdk` paths are still recognised).
 - `package.json`: homepage https://amundai.com, repository
   https://github.com/MorseAI-HQ/amund-sdk-typescript.

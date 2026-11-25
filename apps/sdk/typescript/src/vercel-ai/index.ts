@@ -1,5 +1,5 @@
 /**
- * `@amund/sdk/vercel-ai` — Vercel AI SDK instrumentation.
+ * `@amundai/sdk/vercel-ai` — Vercel AI SDK instrumentation.
  *
  * Mirrors the Python adapters' contract from
  * `openspec/changes/phase-6c-multi-sdk-dogfood/specs/sdk/spec.md`:
@@ -125,7 +125,7 @@ export interface TracedVercelAI {
  * in place; see the module doc comment above).
  *
  * ```ts
- * import { createTracedVercelAI } from "@amund/sdk/vercel-ai";
+ * import { createTracedVercelAI } from "@amundai/sdk/vercel-ai";
  * const { streamText } = await createTracedVercelAI();
  * // use streamText(...) exactly like ai's own streamText(...)
  * ```

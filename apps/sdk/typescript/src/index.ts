@@ -1,14 +1,14 @@
 /**
- * `@amund/sdk` — TypeScript SDK for Amund (formerly Morse) observability.
+ * `@amundai/sdk` — TypeScript SDK for Amund (formerly Morse) observability.
  *
  * V2 module-level singleton API:
  *
  * ```ts
- * import * as morse from "@amund/sdk";
+ * import * as morse from "@amundai/sdk";
  *
  * // Three-step zero-setup integration:
  * //   1. Generate an API key in the Amund dashboard.
- * //   2. npm install @amund/sdk
+ * //   2. npm install @amundai/sdk
  * //   3. Set AMUND_API_KEY in your environment.
  *
  * morse.track({ agentId: "lead-qualifier", runData: { success: true } });

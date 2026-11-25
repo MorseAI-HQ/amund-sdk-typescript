@@ -1,6 +1,6 @@
 # Published-SDK E2E (`dogfood-published/`)
 
-Verifies the **published** `@amund/sdk` from npm — not the workspace build.
+Verifies the **published** `@amundai/sdk` from npm — not the workspace build.
 (Through 0.8.0 the package was `@morsehq-dev/sdk`; that name is now a re-export
 shim, smoke-tested from the packed tarballs by `../scripts/smoke-packed.mjs`.)
 
@@ -11,7 +11,7 @@ API that turns out to need an internal import. This directory catches those.
 
 ## Why it is not in the pnpm workspace
 
-Deliberately. If it were, `@amund/sdk` would resolve to the local build and
+Deliberately. If it were, `@amundai/sdk` would resolve to the local build and
 the whole point is lost. Install it with plain `npm` in this directory:
 
 ```bash
@@ -19,7 +19,7 @@ cd apps/sdk/typescript/dogfood-published
 npm install
 ```
 
-Bump the pinned `@amund/sdk` version in `package.json` when a new release
+Bump the pinned `@amundai/sdk` version in `package.json` when a new release
 goes out — the pin is the thing under test, so it must never be a floating range
 that silently resolves to something else.
 
@@ -55,7 +55,7 @@ order by t.started_at desc;
 ## Scope
 
 `anthropic`, `openai`, `langgraph` — one real LLM call each, via the published
-public entrypoints only (`@amund/sdk`, `@amund/sdk/anthropic`, …).
+public entrypoints only (`@amundai/sdk`, `@amundai/sdk/anthropic`, …).
 No `_internal` imports: if a scenario here needs one, that is itself the finding.
 
 The Python counterpart is `apps/sdk/python/dogfood-published/run.py`.

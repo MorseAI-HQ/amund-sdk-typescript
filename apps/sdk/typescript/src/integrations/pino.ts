@@ -10,7 +10,7 @@
  *
  * ```ts
  * import pino from "pino";
- * import { morsePinoDestination } from "@amund/sdk/integrations/pino";
+ * import { morsePinoDestination } from "@amundai/sdk/integrations/pino";
  *
  * const logger = pino(
  *   { level: "info" },

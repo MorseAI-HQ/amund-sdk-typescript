@@ -1,5 +1,5 @@
 /**
- * `@amund/sdk/openai-agents` — OpenAI Agents SDK runner wrapper.
+ * `@amundai/sdk/openai-agents` — OpenAI Agents SDK runner wrapper.
  *
  * This module implements ONLY the outer-span (agent) instrumentation around
  * `Runner.run()`. Sibling files (`llm-and-tool.ts`, `handoff.ts`,

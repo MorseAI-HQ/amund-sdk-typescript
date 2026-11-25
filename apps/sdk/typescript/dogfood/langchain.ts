@@ -1,5 +1,5 @@
 /**
- * Dogfood: generic LangChain JS adapter (`@amund/sdk/langchain`).
+ * Dogfood: generic LangChain JS adapter (`@amundai/sdk/langchain`).
  *
  * Runs a tiny real `ChatOpenAI` call through `@langchain/core` with a
  * `MorseCallbackHandler` attached, sends the trace to Morse dev, prints

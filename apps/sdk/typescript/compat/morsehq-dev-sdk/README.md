@@ -1,19 +1,19 @@
-# @morsehq-dev/sdk (deprecated: use `@amund/sdk`)
+# @morsehq-dev/sdk (deprecated: use `@amundai/sdk`)
 
 Morse is now [Amund](https://amundai.com). The SDK is published as
-[`@amund/sdk`](https://www.npmjs.com/package/@amund/sdk); this package is a
+[`@amundai/sdk`](https://www.npmjs.com/package/@amundai/sdk); this package is a
 compatibility shim so existing installs keep working.
 
 ```bash
 npm uninstall @morsehq-dev/sdk
-npm install @amund/sdk
+npm install @amundai/sdk
 ```
 
 ```diff
 - import * as morse from "@morsehq-dev/sdk";
 - import { wrapAnthropic } from "@morsehq-dev/sdk/anthropic";
-+ import * as morse from "@amund/sdk";
-+ import { wrapAnthropic } from "@amund/sdk/anthropic";
++ import * as morse from "@amundai/sdk";
++ import { wrapAnthropic } from "@amundai/sdk/anthropic";
 ```
 
 Nothing else changes: same API, same subpaths, same `mhq_` keys, same endpoint.
@@ -22,9 +22,9 @@ are set.
 
 ## How the shim works
 
-- It depends on exactly the same version of `@amund/sdk` and has the same
+- It depends on exactly the same version of `@amundai/sdk` and has the same
   `exports` map (every subpath; ESM, CommonJS, types and `browser` conditions).
-- Every entry point is a one-line re-export of the matching `@amund/sdk` entry
+- Every entry point is a one-line re-export of the matching `@amundai/sdk` entry
   point, so both names return the same module instances: one SDK, one transport,
   even if your code imports from both during a migration.
 - The first import prints one deprecation notice per process. It is not printed

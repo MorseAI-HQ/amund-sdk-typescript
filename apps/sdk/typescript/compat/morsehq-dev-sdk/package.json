@@ -1,7 +1,7 @@
 {
   "name": "@morsehq-dev/sdk",
   "version": "0.8.1-rc.1",
-  "description": "Deprecated: Morse is now Amund. This package re-exports @amund/sdk; install @amund/sdk instead.",
+  "description": "Deprecated: Morse is now Amund. This package re-exports @amundai/sdk; install @amundai/sdk instead.",
   "license": "MIT",
   "homepage": "https://amundai.com",
   "repository": {
@@ -101,6 +101,6 @@
     "test": "node --test test/shim-smoke.mjs"
   },
   "dependencies": {
-    "@amund/sdk": "workspace:*"
+    "@amundai/sdk": "workspace:*"
   }
 }

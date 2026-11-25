@@ -1,8 +1,8 @@
 import { StateGraph, START, END, Annotation } from "@langchain/langgraph";
 import { ChatOpenAI } from "@langchain/openai";
 import { HumanMessage } from "@langchain/core/messages";
-import { runTraced } from "@amund/sdk";
-import { MorseCallbackHandler } from "@amund/sdk/langgraph";
+import { runTraced } from "@amundai/sdk";
+import { MorseCallbackHandler } from "@amundai/sdk/langgraph";
 import { requireEnv, runDogfood } from "./_common.js";
 
 async function main() {

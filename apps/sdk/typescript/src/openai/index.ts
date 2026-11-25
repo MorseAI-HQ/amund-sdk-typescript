@@ -1,5 +1,5 @@
 /**
- * `@amund/sdk/openai` — plain OpenAI SDK instrumentation.
+ * `@amundai/sdk/openai` — plain OpenAI SDK instrumentation.
  *
  * Wraps a raw `openai` npm package client (`new OpenAI()` /
  * `new AzureOpenAI()` / any structurally-compatible client) so every
@@ -22,7 +22,7 @@
  * `_internal/auto-detect.ts` and Python's `_internal/auto_detect.py`
  * `_adapter_targets()`, which both omit bare `openai`).
  *
- * Distinct from `@amund/sdk/openai-agents`, which instruments the
+ * Distinct from `@amundai/sdk/openai-agents`, which instruments the
  * `@openai/agents` Agents SDK (a different package with its own Runner /
  * Agent abstractions). This module is for customers calling
  * `openai.chat.completions.create` directly.
@@ -203,7 +203,7 @@ export interface WrapOpenAiOptions {
  *
  * @example
  * ```ts
- * import { wrapOpenAI } from "@amund/sdk/openai";
+ * import { wrapOpenAI } from "@amundai/sdk/openai";
  * import OpenAI from "openai";
  *
  * const client = wrapOpenAI(new OpenAI());

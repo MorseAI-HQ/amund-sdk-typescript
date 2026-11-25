@@ -9,7 +9,7 @@
  *
  * Customer flow becomes:
  *
- *     npm install @amund/sdk
+ *     npm install @amundai/sdk
  *     export AMUND_API_KEY=mhq_...
  *     // ... existing @anthropic-ai/sdk / ai code is now traced ...
  *
@@ -120,20 +120,20 @@ const FULL_INSTALL_TARGETS: Record<string, FullInstallTarget> = {
  * why silent auto-install isn't possible for these yet.
  */
 const DETECT_ONLY_TARGETS: Record<string, string> = {
-  "@openai/agents": "wrapRunnerWithFullInstrumentation(runner) from '@amund/sdk/openai-agents'",
+  "@openai/agents": "wrapRunnerWithFullInstrumentation(runner) from '@amundai/sdk/openai-agents'",
   "@langchain/langgraph":
-    "new MorseCallbackHandler() from '@amund/sdk/langgraph', passed via { callbacks: [...] }",
+    "new MorseCallbackHandler() from '@amundai/sdk/langgraph', passed via { callbacks: [...] }",
   // MHQ-936: same shape as `ai` below. The package exports a top-level
   // `query` that is read-only and non-configurable, so it cannot be patched
   // in place; and it has no client class to patch a prototype on
   // (`ClaudeSDKClient` is the *Python* package's API and has never existed
   // here). wrapClaudeAgentQuery() returns a traced replacement instead.
   "@anthropic-ai/claude-agent-sdk":
-    "wrapClaudeAgentQuery(query) from '@amund/sdk/anthropic-agent-sdk' — call its returned function in place of the package's own query()",
+    "wrapClaudeAgentQuery(query) from '@amundai/sdk/anthropic-agent-sdk' — call its returned function in place of the package's own query()",
   // MHQ-758: `ai`'s exports can't be patched in place (frozen ESM getters,
   // no prototype to patch) — createTracedVercelAI() returns replacement
   // functions instead. See `../vercel-ai/index.ts`'s module doc.
-  ai: "createTracedVercelAI() from '@amund/sdk/vercel-ai' — use its returned streamText/generateText/generateObject in place of ai's own",
+  ai: "createTracedVercelAI() from '@amundai/sdk/vercel-ai' — use its returned streamText/generateText/generateObject in place of ai's own",
 };
 
 /* ------------------------------------------------------------------------ */

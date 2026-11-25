@@ -13,9 +13,9 @@
 const FLAG = Symbol.for("@morsehq-dev/sdk.deprecation-warned");
 
 export const MESSAGE =
-  "morse: @morsehq-dev/sdk is deprecated and is now a thin re-export of @amund/sdk " +
-  "(Morse is now Amund). Install @amund/sdk and change your imports from " +
-  '"@morsehq-dev/sdk" to "@amund/sdk"; the API is identical. ' +
+  "morse: @morsehq-dev/sdk is deprecated and is now a thin re-export of @amundai/sdk " +
+  "(Morse is now Amund). Install @amundai/sdk and change your imports from " +
+  '"@morsehq-dev/sdk" to "@amundai/sdk"; the API is identical. ' +
   "MORSE_* environment variables keep working (AMUND_* takes precedence).";
 
 function env(name) {
