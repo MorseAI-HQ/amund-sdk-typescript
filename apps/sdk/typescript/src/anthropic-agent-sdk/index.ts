@@ -1,5 +1,5 @@
 /**
- * `@amund/sdk/anthropic-agent-sdk` — public surface for the
+ * `@amundai/sdk/anthropic-agent-sdk` — public surface for the
  * `@anthropic-ai/claude-agent-sdk` adapter.
  *
  * Composes the four W2-A surfaces:

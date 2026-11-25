@@ -44,13 +44,13 @@ jobs:
       - name: Install locked dependencies and native test bindings
         run: pnpm install --frozen-lockfile
       - name: Type-check
-        run: pnpm --filter @amund/sdk type-check
+        run: pnpm --filter @amundai/sdk type-check
       - name: Lint
-        run: pnpm --filter @amund/sdk lint
+        run: pnpm --filter @amundai/sdk lint
       - name: Test serially with original timeouts
-        run: pnpm --filter @amund/sdk exec vitest run --maxWorkers=1
+        run: pnpm --filter @amundai/sdk exec vitest run --maxWorkers=1
       - name: Build
-        run: pnpm --filter @amund/sdk build
+        run: pnpm --filter @amundai/sdk build
       - name: Build + test the @morsehq-dev/sdk compatibility shim
         run: |
           pnpm --filter @morsehq-dev/sdk build
@@ -67,5 +67,5 @@ jobs:
         run: |
           node scripts/pack-published.mjs --no-build --out "$RUNNER_TEMP/packed"
           node scripts/smoke-packed.mjs \
-            "$RUNNER_TEMP/packed/amund-sdk-$(node -p "require('./package.json').version").tgz" \
+            "$RUNNER_TEMP/packed/amundai-sdk-$(node -p "require('./package.json').version").tgz" \
             "$RUNNER_TEMP/packed/morsehq-dev-sdk-$(node -p "require('./package.json').version").tgz"

@@ -1,5 +1,5 @@
 /**
- * `@amund/sdk/anthropic` — Anthropic SDK instrumentation.
+ * `@amundai/sdk/anthropic` — Anthropic SDK instrumentation.
  *
  * Wraps `@anthropic-ai/sdk` `client.messages.create` so every Claude call
  * emits an `llm` span carrying pre-segmented `context_segments`. The

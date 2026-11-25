@@ -1,5 +1,5 @@
 /**
- * Dogfood: raw Anthropic SDK adapter (`@amund/sdk/anthropic`).
+ * Dogfood: raw Anthropic SDK adapter (`@amundai/sdk/anthropic`).
  *
  * Wraps a plain `@anthropic-ai/sdk` client and makes one `messages.create`
  * call, sends the trace to Morse dev, prints the trace id, exits.

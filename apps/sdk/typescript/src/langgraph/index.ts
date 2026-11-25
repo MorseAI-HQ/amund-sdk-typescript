@@ -1,5 +1,5 @@
 /**
- * `@amund/sdk/langgraph` — adapter for `@langchain/langgraph` (langgraphjs).
+ * `@amundai/sdk/langgraph` — adapter for `@langchain/langgraph` (langgraphjs).
  *
  * W3-L: composes the three W2-L surfaces into a single
  * `MorseCallbackHandler` class exposing the full
@@ -12,7 +12,7 @@
  * Users get a single class to register with LangGraph:
  *
  * ```ts
- * import { MorseCallbackHandler } from "@amund/sdk/langgraph";
+ * import { MorseCallbackHandler } from "@amundai/sdk/langgraph";
  * await app.invoke(input, { callbacks: [new MorseCallbackHandler()] });
  * ```
  *

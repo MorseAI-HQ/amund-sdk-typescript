@@ -260,7 +260,7 @@ export function morseTracer(options: MorseTracerOptions = {}): Tracer {
  * ```ts
  * import { generateText } from "ai";
  * import { LegacyOpenTelemetry } from "@ai-sdk/otel";
- * import { morseTelemetry } from "@amund/sdk/vercel-ai";
+ * import { morseTelemetry } from "@amundai/sdk/vercel-ai";
  *
  * await generateText({
  *   model,

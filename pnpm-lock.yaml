@@ -247,7 +247,7 @@ importers:
 
   apps/sdk/typescript/compat/morsehq-dev-sdk:
     dependencies:
-      '@amund/sdk':
+      '@amundai/sdk':
         specifier: workspace:*
         version: link:../..
 

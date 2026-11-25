@@ -3,10 +3,10 @@
 Unified observability for AI agents and infrastructure — Node backend, one SDK.
 
 > **Morse is now Amund.** This package was published as `@morsehq-dev/sdk` up
-> to 0.8.0. From the next release it is `@amund/sdk`, and `@morsehq-dev/sdk` keeps
-> working, published at the same version as a thin compatibility package that re-exports `@amund/sdk` (same module
+> to 0.8.0. From the next release it is `@amundai/sdk`, and `@morsehq-dev/sdk` keeps
+> working, published at the same version as a thin compatibility package that re-exports `@amundai/sdk` (same module
 > instances, every subpath) and prints a one-time deprecation notice. To
-> migrate, swap the dependency and replace `@morsehq-dev/sdk` with `@amund/sdk`
+> migrate, swap the dependency and replace `@morsehq-dev/sdk` with `@amundai/sdk`
 > in your imports. Nothing else changes: the API, the `mhq_` key format and the
 > default endpoint are the same.
 >
@@ -41,7 +41,7 @@ Unified observability for AI agents and infrastructure — Node backend, one SDK
 ## Install
 
 ```bash
-npm install @amund/sdk
+npm install @amundai/sdk
 ```
 
 Adapters are peer dependencies — install only the SDKs you actually
@@ -52,7 +52,7 @@ Nothing else is pulled in for adapters you don't use.
 ## Quick Start
 
 ```ts
-import * as morse from "@amund/sdk";
+import * as morse from "@amundai/sdk";
 
 morse.init({ apiKey: process.env.AMUND_API_KEY });
 
@@ -193,11 +193,11 @@ require peer `zod ^4`, and this monorepo is on zod 3 (MHQ-935).
 `openai` and `@anthropic-ai/sdk` have no nightly `latest` lane yet — their
 floors are verified per PR, but nothing watches upstream for them (MHQ-930).
 
-### `@amund/sdk/anthropic` — Anthropic Messages API
+### `@amundai/sdk/anthropic` — Anthropic Messages API
 
 ```ts
 import Anthropic from "@anthropic-ai/sdk";
-import { wrapAnthropic } from "@amund/sdk/anthropic";
+import { wrapAnthropic } from "@amundai/sdk/anthropic";
 
 const client = wrapAnthropic(new Anthropic());
 // every messages.create call now emits an `llm` span automatically
@@ -208,11 +208,11 @@ no-op on a client if a global auto-detect install is already active
 (no double-recording). Pass `{ summarize: true }` to also emit a
 sibling `memory` span per call.
 
-### `@amund/sdk/openai` — OpenAI (Chat Completions and Responses)
+### `@amundai/sdk/openai` — OpenAI (Chat Completions and Responses)
 
 ```ts
 import OpenAI from "openai";
-import { wrapOpenAI } from "@amund/sdk/openai";
+import { wrapOpenAI } from "@amundai/sdk/openai";
 
 const client = wrapOpenAI(new OpenAI());
 // chat.completions.create and responses.create each emit an `llm` span
@@ -230,7 +230,7 @@ A stream returned from `morse.run()` and read afterwards (a streamed HTTP route)
 keeps its trace open until the stream ends, for this adapter, `wrapAnthropic` and
 the Vercel AI adapter.
 
-### `@amund/sdk/anthropic-agent-sdk` — Claude Agent SDK
+### `@amundai/sdk/anthropic-agent-sdk` — Claude Agent SDK
 
 Wrap the package's top-level `query` and call the returned function in its
 place. The trace's root span is the agent (it carries the served model; pass
@@ -241,7 +241,7 @@ spans, **subagent.spawn** spans for Task-tool fan-out, and **hook** spans.
 
 ```ts
 import { query } from "@anthropic-ai/claude-agent-sdk";
-import { wrapClaudeAgentQuery } from "@amund/sdk/anthropic-agent-sdk";
+import { wrapClaudeAgentQuery } from "@amundai/sdk/anthropic-agent-sdk";
 
 const tracedQuery = wrapClaudeAgentQuery(query);
 
@@ -259,7 +259,7 @@ export is read-only and non-configurable, so there is nothing to patch in
 place — the same constraint the Vercel AI adapter hit. Auto-detect notices
 the package and logs a one-time hint pointing here.
 
-### `@amund/sdk/openai-agents` — OpenAI Agents SDK
+### `@amundai/sdk/openai-agents` — OpenAI Agents SDK
 
 Wraps `Runner` from `@openai/agents`. Emits an outer **agent** span,
 **llm** + **tool** spans, **subagent.spawn**-shaped spans for
@@ -267,7 +267,7 @@ Wraps `Runner` from `@openai/agents`. Emits an outer **agent** span,
 
 ```ts
 import { Runner, Agent } from "@openai/agents";
-import { wrapRunnerWithFullInstrumentation } from "@amund/sdk/openai-agents";
+import { wrapRunnerWithFullInstrumentation } from "@amundai/sdk/openai-agents";
 
 const raw = new Runner();
 const { runner, dispose } = wrapRunnerWithFullInstrumentation(raw);
@@ -276,7 +276,7 @@ await runner.run(agent, userInput);
 dispose();
 ```
 
-### `@amund/sdk/langgraph` — LangGraph JS
+### `@amundai/sdk/langgraph` — LangGraph JS
 
 `MorseCallbackHandler`, a `BaseCallbackHandler` you pass via
 `callbacks`. Emits **agent** spans per chain (nested chains nest
@@ -284,13 +284,13 @@ properly), **llm** + **tool** spans, and aggregates streaming tokens
 onto the parent llm span rather than emitting per-token spans.
 
 ```ts
-import { MorseCallbackHandler } from "@amund/sdk/langgraph";
+import { MorseCallbackHandler } from "@amundai/sdk/langgraph";
 
 const handler = new MorseCallbackHandler();
 const result = await graph.invoke(input, { callbacks: [handler] });
 ```
 
-### `@amund/sdk/langchain` — plain LangChain (chains, LLMs, tools, retrievers)
+### `@amundai/sdk/langchain` — plain LangChain (chains, LLMs, tools, retrievers)
 
 `MorseCallbackHandler` for `@langchain/core` outside a LangGraph graph
 — a structural sibling of the `langgraph` adapter, not a subclass.
@@ -298,8 +298,8 @@ Doesn't auto-create a trace when none is active; wrap the invocation in
 `morse.run()`.
 
 ```ts
-import { MorseCallbackHandler } from "@amund/sdk/langchain";
-import * as morse from "@amund/sdk";
+import { MorseCallbackHandler } from "@amundai/sdk/langchain";
+import * as morse from "@amundai/sdk";
 
 const handler = new MorseCallbackHandler({ agentName: "my-agent" });
 await morse.run({ agentName: "my-agent" }, async () => {
@@ -307,7 +307,7 @@ await morse.run({ agentName: "my-agent" }, async () => {
 });
 ```
 
-### `@amund/sdk/vercel-ai` — Vercel AI SDK
+### `@amundai/sdk/vercel-ai` — Vercel AI SDK
 
 One `llm` span per top-level `streamText` / `generateText` /
 `generateObject` invocation (in a trace of its own when no `run()` is open),
@@ -320,7 +320,7 @@ ships pure ESM), so there is nothing a monkey-patch can reassign, unlike
 replacement functions once and call those instead of `ai`'s own:
 
 ```ts
-import { createTracedVercelAI } from "@amund/sdk/vercel-ai";
+import { createTracedVercelAI } from "@amundai/sdk/vercel-ai";
 
 const { streamText, generateText, generateObject } = await createTracedVercelAI();
 // use streamText(...) / generateText(...) / generateObject(...) exactly
@@ -337,8 +337,8 @@ integration from [`@ai-sdk/otel`](https://www.npmjs.com/package/@ai-sdk/otel)
 ```ts
 import { generateText } from "ai";
 import { LegacyOpenTelemetry } from "@ai-sdk/otel";
-import * as morse from "@amund/sdk";
-import { morseTelemetry } from "@amund/sdk/vercel-ai";
+import * as morse from "@amundai/sdk";
+import { morseTelemetry } from "@amundai/sdk/vercel-ai";
 
 morse.init({ apiKey: process.env.AMUND_API_KEY });
 
@@ -365,13 +365,13 @@ await generateText({
 - Need a bare tracer (for `new OpenTelemetry({ tracer, ...options })` or a
   pre-v7 `ai`)? `morseTracer()` returns one.
 
-### `@amund/sdk/integrations/pino` — pino log forwarding
+### `@amundai/sdk/integrations/pino` — pino log forwarding
 
 Ship pino log lines to Amund, auto-correlated with the active trace.
 
 ```ts
 import pino from "pino";
-import { morsePinoDestination } from "@amund/sdk/integrations/pino";
+import { morsePinoDestination } from "@amundai/sdk/integrations/pino";
 
 const logger = pino(
   { level: "info" },
@@ -393,7 +393,7 @@ backend `SpanType` enum gains native variants.
 ## Fetching hosted prompts
 
 ```ts
-import * as morse from "@amund/sdk";
+import * as morse from "@amundai/sdk";
 
 const prompt = await morse.getPrompt("triage"); // label "production"
 await morse.getPrompt("triage", { version: 3 }); // or pin a version
@@ -470,7 +470,7 @@ leaves for the Amund ingest endpoint. The same pattern catalogue ships
 in the Python SDK and the server-side ingest layer.
 
 ```ts
-import { init } from "@amund/sdk";
+import { init } from "@amundai/sdk";
 
 init({
   apiKey: process.env.AMUND_API_KEY,
@@ -512,22 +512,22 @@ This README stays a quickstart.
 
 ## Installing what a release ships (QA / dogfood)
 
-A release publishes two tarballs, both built by `pnpm pack`: `@amund/sdk` and the
+A release publishes two tarballs, both built by `pnpm pack`: `@amundai/sdk` and the
 `@morsehq-dev/sdk` compatibility shim (`compat/morsehq-dev-sdk/`). To test them
 exactly as a release publishes them:
 
 ```bash
-pnpm --filter @amund/sdk pack:published          # builds both, packs, prints both tarball paths
-pnpm --filter @amund/sdk pack:published --no-build --out /tmp/sdk-pack
-pnpm --filter @amund/sdk smoke:packed            # install both into a temp project, import every subpath (ESM, CJS, types)
-npm install /path/to/amund-sdk-X.Y.Z.tgz         # in a project outside the monorepo
+pnpm --filter @amundai/sdk pack:published          # builds both, packs, prints both tarball paths
+pnpm --filter @amundai/sdk pack:published --no-build --out /tmp/sdk-pack
+pnpm --filter @amundai/sdk smoke:packed            # install both into a temp project, import every subpath (ESM, CJS, types)
+npm install /path/to/amundai-sdk-X.Y.Z.tgz         # in a project outside the monorepo
 ```
 
 Tarballs are written outside the source tree; `package.json` is never modified.
 
 ## Naming
 
-The npm package is `@amund/sdk` (npm org `amund`), and that is also the pnpm
+The npm package is `@amundai/sdk` (npm org `amundai`), and that is also the pnpm
 workspace name in this repo. `@morsehq-dev/sdk` is the pre-rebrand npm name
 (0.4.0 – 0.8.0); from the next release on it is published from `compat/morsehq-dev-sdk/` as a
 re-export shim at the same version. `@morsehq/sdk` was the old in-repo workspace

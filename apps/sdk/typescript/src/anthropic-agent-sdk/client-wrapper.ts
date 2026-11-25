@@ -1,5 +1,5 @@
 /**
- * `@amund/sdk/anthropic-agent-sdk` — Claude Agent SDK client wrapper.
+ * `@amundai/sdk/anthropic-agent-sdk` — Claude Agent SDK client wrapper.
  *
  * This module implements ONLY the outer-span (agent) instrumentation around
  * `ClaudeSDKClient.query()`. Sibling files (`llm-instrumentation.ts`,

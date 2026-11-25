@@ -148,7 +148,7 @@ function logImpl(message: string, options: LogOptions = {}): void {
  *
  * @example
  * ```ts
- * import { init, runTraced, log } from "@amund/sdk";
+ * import { init, runTraced, log } from "@amundai/sdk";
  *
  * init({ apiKey: process.env.AMUND_API_KEY });
  *

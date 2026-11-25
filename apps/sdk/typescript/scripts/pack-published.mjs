@@ -2,13 +2,13 @@
 /**
  * `pnpm pack:published` — pack the SDK exactly as a release ships it.
  *
- * Since the Amund rebrand the in-repo name IS the published name (`@amund/sdk`),
+ * Since the Amund rebrand the in-repo name IS the published name (`@amundai/sdk`),
  * so there is no rename step any more (through 0.8.0 the release workflow rewrote
  * `@morsehq/sdk` to `@morsehq-dev/sdk`, MHQ-1411). A release publishes TWO
  * tarballs, both produced by `pnpm pack` (which pins the shim's
- * `"@amund/sdk": "workspace:*"` dependency to the exact version):
+ * `"@amundai/sdk": "workspace:*"` dependency to the exact version):
  *
- *   - `@amund/sdk`         — this package
+ *   - `@amundai/sdk`         — this package
  *   - `@morsehq-dev/sdk`   — the compatibility shim in compat/morsehq-dev-sdk/
  *
  * `.github/workflows/release-typescript.yml` calls this script, smoke-tests the
@@ -20,7 +20,7 @@
  *   pnpm pack:published --out <dir>     # choose the output directory
  *
  * Prints the two absolute tarball paths on the last two lines of stdout
- * (`@amund/sdk` first, then the shim).
+ * (`@amundai/sdk` first, then the shim).
  */
 import { execFileSync } from "node:child_process";
 import { existsSync, mkdirSync, readFileSync } from "node:fs";
@@ -70,7 +70,7 @@ export function packDir({ dir, outDir }) {
 }
 
 /**
- * Build (optionally) and pack `@amund/sdk` and the `@morsehq-dev/sdk` shim.
+ * Build (optionally) and pack `@amundai/sdk` and the `@morsehq-dev/sdk` shim.
  *
  * @param {{ outDir?: string, build?: boolean, sdkDir?: string, shimDir?: string }} opts
  * @returns {{ sdk: string, shim: string }} absolute tarball paths

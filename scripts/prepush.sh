@@ -39,6 +39,6 @@ pnpm type-check
 say "lint"
 pnpm lint
 say "vitest"
-pnpm --filter @amund/sdk exec vitest run --maxWorkers=1
+pnpm --filter @amundai/sdk exec vitest run --maxWorkers=1
 
 say "ok ($(( $(date +%s) - START ))s)"

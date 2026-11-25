@@ -1,18 +1,18 @@
 #!/usr/bin/env node
 /**
- * Install the packed `@amund/sdk` + `@morsehq-dev/sdk` tarballs into a scratch
+ * Install the packed `@amundai/sdk` + `@morsehq-dev/sdk` tarballs into a scratch
  * project OUTSIDE the repo (OS temp dir) and prove, the way a customer would
  * hit it, that every subpath of both packages:
  *
  *   - imports under ESM and requires under CJS,
- *   - returns the SAME module instances from the shim as from `@amund/sdk`,
+ *   - returns the SAME module instances from the shim as from `@amundai/sdk`,
  *   - type-checks under `moduleResolution: nodenext` (shim types re-export).
  *
  * Usage:
  *   node scripts/smoke-packed.mjs <amund-sdk.tgz> <morsehq-dev-sdk.tgz>
  *   node scripts/smoke-packed.mjs            # packs both first (pack:published --no-build)
  *
- * Needs network access to the npm registry for @amund/sdk's own dependencies.
+ * Needs network access to the npm registry for @amundai/sdk's own dependencies.
  * Exit code 0 = all good. The scratch dir is removed unless KEEP_SMOKE_DIR=1.
  */
 import { execFileSync } from "node:child_process";
@@ -48,12 +48,12 @@ try {
         private: true,
         version: "0.0.0",
         dependencies: {
-          "@amund/sdk": `file:${sdkTgz}`,
+          "@amundai/sdk": `file:${sdkTgz}`,
           "@morsehq-dev/sdk": `file:${shimTgz}`,
         },
-        // The shim depends on the exact @amund/sdk version; point that at the
+        // The shim depends on the exact @amundai/sdk version; point that at the
         // local tarball so the smoke works before anything is on the registry.
-        overrides: { "@amund/sdk": "$@amund/sdk" },
+        overrides: { "@amundai/sdk": "$@amundai/sdk" },
       },
       null,
       2,
@@ -63,15 +63,15 @@ try {
 
   const installed = (name) =>
     JSON.parse(readFileSync(join(work, "node_modules", name, "package.json"), "utf8"));
-  const sdkPkg = installed("@amund/sdk");
+  const sdkPkg = installed("@amundai/sdk");
   const shimPkg = installed("@morsehq-dev/sdk");
-  if (shimPkg.dependencies?.["@amund/sdk"] !== sdkPkg.version) {
+  if (shimPkg.dependencies?.["@amundai/sdk"] !== sdkPkg.version) {
     throw new Error(
-      `shim depends on @amund/sdk ${JSON.stringify(shimPkg.dependencies)}, expected exactly ${sdkPkg.version}`,
+      `shim depends on @amundai/sdk ${JSON.stringify(shimPkg.dependencies)}, expected exactly ${sdkPkg.version}`,
     );
   }
   if (JSON.stringify(shimPkg.exports) !== JSON.stringify(sdkPkg.exports)) {
-    throw new Error("installed shim exports map differs from @amund/sdk's");
+    throw new Error("installed shim exports map differs from @amundai/sdk's");
   }
   const subs = Object.keys(sdkPkg.exports)
     .filter((k) => k !== "./package.json")
@@ -86,19 +86,19 @@ const warns = [];
 const orig = console.warn;
 console.warn = (...a) => { warns.push(a.join(" ")); };
 for (const s of subs) {
-  const real = await import("@amund/sdk" + s);
+  const real = await import("@amundai/sdk" + s);
   const shim = await import("@morsehq-dev/sdk" + s);
   const keys = Object.keys(real).sort();
-  if (keys.length === 0) throw new Error("ESM @amund/sdk" + s + " exported nothing");
+  if (keys.length === 0) throw new Error("ESM @amundai/sdk" + s + " exported nothing");
   if (JSON.stringify(Object.keys(shim).sort()) !== JSON.stringify(keys)) throw new Error("ESM key mismatch on " + s);
   for (const k of keys) if (shim[k] !== real[k]) throw new Error("ESM instance mismatch " + s + " " + k);
 }
 console.warn = orig;
 const n = warns.filter((w) => w.includes(${JSON.stringify(MARK)})).length;
 if (n !== 1) throw new Error("ESM: expected 1 deprecation warning, got " + n);
-const m = await import("@amund/sdk");
-if (typeof m.init !== "function" || typeof m.version !== "string") throw new Error("ESM @amund/sdk surface broken");
-console.log("ESM ok: " + subs.length + " subpaths, @amund/sdk " + m.version);
+const m = await import("@amundai/sdk");
+if (typeof m.init !== "function" || typeof m.version !== "string") throw new Error("ESM @amundai/sdk surface broken");
+console.log("ESM ok: " + subs.length + " subpaths, @amundai/sdk " + m.version);
 `,
   );
   writeFileSync(
@@ -109,10 +109,10 @@ const warns = [];
 const orig = console.warn;
 console.warn = (...a) => { warns.push(a.join(" ")); };
 for (const s of subs) {
-  const real = require("@amund/sdk" + s);
+  const real = require("@amundai/sdk" + s);
   const shim = require("@morsehq-dev/sdk" + s);
   if (shim !== real) throw new Error("CJS instance mismatch on " + s);
-  if (Object.keys(real).length === 0) throw new Error("CJS @amund/sdk" + s + " exported nothing");
+  if (Object.keys(real).length === 0) throw new Error("CJS @amundai/sdk" + s + " exported nothing");
 }
 console.warn = orig;
 const n = warns.filter((w) => w.includes(${JSON.stringify(MARK)})).length;
@@ -128,7 +128,7 @@ console.log("CJS ok: " + subs.length + " subpaths");
   // Types: every subpath of both packages resolves under nodenext, and the
   // shim's declarations are the SDK's declarations.
   const lines = subs.flatMap((s, i) => [
-    `import * as real${i} from "@amund/sdk${s}";`,
+    `import * as real${i} from "@amundai/sdk${s}";`,
     `import * as shim${i} from "@morsehq-dev/sdk${s}";`,
     `export const same${i}: typeof real${i} = shim${i};`,
     `export const back${i}: typeof shim${i} = real${i};`,

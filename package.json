@@ -5,12 +5,12 @@
   "scripts": {
     "format": "prettier --write \"**/*.{ts,tsx,js,jsx,json,md,yml,yaml}\"",
     "pre-commit": "pre-commit run --all-files",
-    "dev": "pnpm --filter @amund/sdk dev",
-    "build": "pnpm --filter @amund/sdk build && pnpm --filter @morsehq-dev/sdk build",
+    "dev": "pnpm --filter @amundai/sdk dev",
+    "build": "pnpm --filter @amundai/sdk build && pnpm --filter @morsehq-dev/sdk build",
     "test:shim": "pnpm build && pnpm --filter @morsehq-dev/sdk test",
-    "lint": "pnpm --filter @amund/sdk lint",
-    "test": "pnpm --filter @amund/sdk test",
-    "type-check": "pnpm --filter @amund/sdk type-check",
+    "lint": "pnpm --filter @amundai/sdk lint",
+    "test": "pnpm --filter @amundai/sdk test",
+    "type-check": "pnpm --filter @amundai/sdk type-check",
     "check:browser": "node scripts/check-sdk-browser-bundle.mjs",
     "setup": "pnpm install --frozen-lockfile"
   },

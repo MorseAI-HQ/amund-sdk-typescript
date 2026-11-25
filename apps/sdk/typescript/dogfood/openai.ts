@@ -1,5 +1,5 @@
 /**
- * Dogfood: raw OpenAI SDK adapter (`@amund/sdk/openai`).
+ * Dogfood: raw OpenAI SDK adapter (`@amundai/sdk/openai`).
  *
  * Wraps a plain `openai` client and makes one `chat.completions.create`
  * call, sends the trace to Morse dev, prints the trace id, exits.
