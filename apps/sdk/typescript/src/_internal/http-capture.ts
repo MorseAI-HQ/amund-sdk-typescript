@@ -21,7 +21,7 @@
 
 import { subscribe, unsubscribe } from "node:diagnostics_channel";
 
-import { DEFAULT_ENDPOINT, getEndpoint, getHttpExcludeHosts } from "./env";
+import { getEndpoint, getHttpExcludeHosts, PROD_API_HOSTS } from "./env";
 import { admitInfraCall, errorLabel } from "./infra-shared";
 import { getActiveTraceState, startDetachedSpan, type DetachedSpan } from "./tracing";
 
@@ -160,15 +160,16 @@ const CHANNELS: Array<[string, (message: unknown) => void]> = [
  * Start recording HTTP client calls made inside an active trace. Idempotent
  * (a second call replaces the exclusion set and subscribes once).
  *
- * @param endpoint The Morse ingest URL in use, so it is never traced. The
- *   default ingest host and `MORSE_ENDPOINT` are always excluded as well.
+ * @param endpoint The Morse ingest URL in use, so it is never traced. Every
+ *   production API host (`api.amundai.com`, `api.morseai.dev`) and
+ *   `MORSE_ENDPOINT` are always excluded as well.
  */
 export function enableHttpCapture(
   opts: { endpoint?: string; extraExcludedHosts?: string[] } = {},
 ): void {
   disableHttpCapture();
-  excluded = new Set(DEFAULT_EXCLUDED_HOSTS);
-  for (const url of [DEFAULT_ENDPOINT, getEndpoint(), opts.endpoint]) {
+  excluded = new Set([...DEFAULT_EXCLUDED_HOSTS, ...PROD_API_HOSTS]);
+  for (const url of [getEndpoint(), opts.endpoint]) {
     const host = url ? hostOf(url) : null;
     if (host) excluded.add(host);
   }

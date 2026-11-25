@@ -444,6 +444,10 @@ JSON-over-fetch batcher as an escape hatch during a migration window;
 you shouldn't need it. `track()`/`batchTrack()` are a lower-level,
 non-trace-shaped escape hatch of their own — prefer `record()`.
 
+Spans go to the Amund API at `https://api.amundai.com` by default. `https://api.morseai.dev`
+remains a supported alias for the same service. Set `MORSE_ENDPOINT` (or `init({ endpoint })`)
+to send elsewhere.
+
 ## PII Redaction
 
 Client-side redaction, **default-on**. Sensitive strings (API keys,

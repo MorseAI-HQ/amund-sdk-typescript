@@ -11,6 +11,20 @@ because they are released in lockstep. Expect the numbers to diverge.
 
 ## [Unreleased]
 
+## [0.8.1-rc.1] — 2026-11-25
+
+### Changed — default endpoint moves to api.amundai.com
+
+- Default endpoint is now https://api.amundai.com/api/v1/traces/batch. https://api.morseai.dev
+  remains a supported alias for the same service; a `MORSE_ENDPOINT` pinned to it keeps working.
+- HTTP auto-capture now recognises both production API hosts (`api.amundai.com`,
+  `api.morseai.dev`) as the SDK's own backend and never records calls to them as `http` spans
+  (before, only the default host was recognised).
+- `api.morsehq.dev` is no longer a production host. A `MORSE_ENDPOINT` pointing at it is still
+  used as given, but traces sent there no longer reach production; switch to the default.
+- Package name (`@morsehq-dev/sdk`), environment variable names and `morse.*`
+  span attribute keys are unchanged.
+
 ## [0.8.0] — 2026-11-19
 
 ### Added — `traceparent` on model calls so a gateway joins the trace (MHQ-1880)

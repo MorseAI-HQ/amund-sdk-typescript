@@ -206,6 +206,21 @@ describe("HTTP capture", () => {
     expect(spans).toHaveLength(0);
   });
 
+  it("never traces a production API host: the default and the api.morseai.dev alias", async () => {
+    // @spec: INFRACAP-06
+    disableHttpCapture();
+    delete process.env.MORSE_ENDPOINT;
+    enableHttpCapture();
+    const spans = await inTrace(async () => {
+      for (const origin of ["https://api.amundai.com", "https://api.morseai.dev"]) {
+        channel("undici:request:create").publish({
+          request: { origin, method: "POST", path: "/api/v1/traces/batch" },
+        });
+      }
+    });
+    expect(spans).toHaveLength(0);
+  });
+
   it("caps http spans per trace and folds the rest into one summary span", async () => {
     // @spec: INFRACAP-04
     const original = INFRA_CAPS.http;
