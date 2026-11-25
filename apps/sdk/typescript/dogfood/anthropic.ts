@@ -1,16 +1,16 @@
 /**
- * Dogfood: raw Anthropic SDK adapter (`@morsehq/sdk/anthropic`).
+ * Dogfood: raw Anthropic SDK adapter (`@amund/sdk/anthropic`).
  *
  * Wraps a plain `@anthropic-ai/sdk` client and makes one `messages.create`
  * call, sends the trace to Morse dev, prints the trace id, exits.
  *
  * Required env:
  *   ANTHROPIC_API_KEY
- *   MORSE_API_KEY  (dev dogfood org)
+ *   AMUND_API_KEY  (dev dogfood org)
  *
  * Optional:
  *   ANTHROPIC_MODEL  (default: claude-haiku-4-5)
- *   MORSE_ENDPOINT
+ *   AMUND_ENDPOINT
  */
 
 import { runAsync, getLastTrace } from "../src/_internal/tracing";

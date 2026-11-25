@@ -83,7 +83,7 @@ export function isClaudeAgentQueryWrapped(fn: unknown): boolean {
  *
  * ```ts
  * import { query } from "@anthropic-ai/claude-agent-sdk";
- * import { wrapClaudeAgentQuery } from "@morsehq-dev/sdk/anthropic-agent-sdk";
+ * import { wrapClaudeAgentQuery } from "@amund/sdk/anthropic-agent-sdk";
  *
  * const tracedQuery = wrapClaudeAgentQuery(query);
  * for await (const message of tracedQuery({ prompt: "..." })) { ... }

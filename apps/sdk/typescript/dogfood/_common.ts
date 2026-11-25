@@ -1,7 +1,7 @@
 /**
  * Shared helpers for the Phase 13 dogfood scripts.
  *
- * - Reads MORSE_API_KEY + MORSE_ENDPOINT.
+ * - Reads AMUND_API_KEY + AMUND_ENDPOINT (MORSE_* still accepted).
  * - Bails with a friendly message if a required env var is missing.
  * - Initializes the Morse SDK pointing at the dev env by default.
  * - Wraps the script body so we always print the trace id + span count
@@ -12,11 +12,12 @@ import * as morse from "../src/index";
 
 export const DEV_ENDPOINT_DEFAULT = "https://api.morseai.dev/api/v1/traces/batch";
 
+/** `name` is unprefixed (`"API_KEY"`): reads `AMUND_<name>`, then the pre-rebrand `MORSE_<name>`. */
 export function requireEnv(name: string, hint?: string): string {
-  const v = process.env[name];
+  const v = process.env[`AMUND_${name}`]?.trim() || process.env[`MORSE_${name}`];
   if (!v || v.length === 0) {
     const help = hint ? `\n  ${hint}` : "";
-    console.error(`\nMissing env var: ${name}${help}\n`);
+    console.error(`\nMissing env var: AMUND_${name} (or MORSE_${name})${help}\n`);
     process.exit(2);
   }
   return v;
@@ -24,10 +25,11 @@ export function requireEnv(name: string, hint?: string): string {
 
 export function initDogfoodSdk(serviceName: string): void {
   const apiKey = requireEnv(
-    "MORSE_API_KEY",
+    "API_KEY",
     "Use the dogfood org's dev key. See bizops/dogfood/README.md.",
   );
-  const endpoint = process.env.MORSE_ENDPOINT || DEV_ENDPOINT_DEFAULT;
+  const endpoint =
+    process.env.AMUND_ENDPOINT?.trim() || process.env.AMUND_ENDPOINT || DEV_ENDPOINT_DEFAULT;
 
   morse.init({
     apiKey,

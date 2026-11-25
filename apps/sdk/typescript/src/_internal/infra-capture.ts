@@ -3,8 +3,8 @@
  * counterpart of Python's `infra_capture.maybe_enable_from_env` plus
  * `queue_capture.maybe_enable_from_env`.
  *
- * On unless switched off: `MORSE_CAPTURE_DB=0`, `MORSE_CAPTURE_HTTP=0`,
- * `MORSE_CAPTURE_QUEUE=0`, or `MORSE_CAPTURE_INFRA=0` for all three (a
+ * On unless switched off: `AMUND_CAPTURE_DB=0`, `AMUND_CAPTURE_HTTP=0`,
+ * `AMUND_CAPTURE_QUEUE=0`, or `AMUND_CAPTURE_INFRA=0` for all three (a
  * specific flag wins). Nothing is recorded outside an active Morse trace.
  *
  * Node-only. The browser build swaps this module for `infra-capture.browser.ts`.
@@ -54,13 +54,13 @@ export function maybeEnableInfraCaptureFromEnv(opts: { endpoint?: string } = {})
     report(err, { fingerprint: "morse.db_capture.register" });
   }
   try {
-    if (isCaptureEnabled("MORSE_CAPTURE_HTTP")) enableHttpCapture({ endpoint: opts.endpoint });
+    if (isCaptureEnabled("CAPTURE_HTTP")) enableHttpCapture({ endpoint: opts.endpoint });
     else disableHttpCapture();
   } catch (err) {
     report(err, { fingerprint: "morse.http_capture.register" });
   }
   try {
-    if (isCaptureEnabled("MORSE_CAPTURE_QUEUE") || isQueueConsumerEnabled()) {
+    if (isCaptureEnabled("CAPTURE_QUEUE") || isQueueConsumerEnabled()) {
       registerQueueInstrumentation();
     } else {
       disableQueueCapture();

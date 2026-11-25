@@ -564,6 +564,7 @@ describe("git revision detection", () => {
   // @spec: ATTR-06
   it("honours the documented env precedence, first match wins", () => {
     expect([...GIT_REVISION_ENV_VARS]).toEqual([
+      "AMUND_GIT_REVISION",
       "MORSE_GIT_REVISION",
       "GITHUB_SHA",
       "CI_COMMIT_SHA",

@@ -5,15 +5,15 @@ import { defineConfig, type Options } from "tsup";
 import pkg from "./package.json" with { type: "json" };
 
 // Nine public entry points (MHQ-747 added the plain OpenAI adapter):
-//   - `src/index.ts`                       → `@morsehq/sdk`
-//   - `src/vercel-ai/index.ts`             → `@morsehq/sdk/vercel-ai`
-//   - `src/anthropic/index.ts`             → `@morsehq/sdk/anthropic`
-//   - `src/anthropic-agent-sdk/index.ts`   → `@morsehq/sdk/anthropic-agent-sdk`
-//   - `src/openai-agents/index.ts`         → `@morsehq/sdk/openai-agents`
-//   - `src/openai/index.ts`                → `@morsehq/sdk/openai`
-//   - `src/langgraph/index.ts`             → `@morsehq/sdk/langgraph`
-//   - `src/langchain/index.ts`             → `@morsehq/sdk/langchain`
-//   - `src/integrations/pino.ts`           → `@morsehq/sdk/integrations/pino`
+//   - `src/index.ts`                       → `@amund/sdk`
+//   - `src/vercel-ai/index.ts`             → `@amund/sdk/vercel-ai`
+//   - `src/anthropic/index.ts`             → `@amund/sdk/anthropic`
+//   - `src/anthropic-agent-sdk/index.ts`   → `@amund/sdk/anthropic-agent-sdk`
+//   - `src/openai-agents/index.ts`         → `@amund/sdk/openai-agents`
+//   - `src/openai/index.ts`                → `@amund/sdk/openai`
+//   - `src/langgraph/index.ts`             → `@amund/sdk/langgraph`
+//   - `src/langchain/index.ts`             → `@amund/sdk/langchain`
+//   - `src/integrations/pino.ts`           → `@amund/sdk/integrations/pino`
 //
 // tsup preserves the directory layout under `dist/` when given a list of
 // entries (vs. a glob), so the resulting paths match the `exports` map in
@@ -49,7 +49,7 @@ const SHARED: Options = {
   // self-contained bundle — each with its OWN copy of `_internal/tracing.ts`
   // / `otel-provider.ts` module-scope singletons (the `OtelEngine`,
   // `transport`, `lastTrace`). `morse.init()` called via the top-level
-  // `@morsehq/sdk` entry never reached the state any subpath adapter
+  // `@amund/sdk` entry never reached the state any subpath adapter
   // (`/vercel-ai`, `/anthropic`, `/langgraph`, ...) actually read from —
   // spans silently went nowhere. Confirmed via `dist/*/index.js` all
   // independently inlining `sendTrace`/`getEngine`, and via an `https`

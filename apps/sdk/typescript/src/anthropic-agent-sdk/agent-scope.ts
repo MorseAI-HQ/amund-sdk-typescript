@@ -8,7 +8,7 @@
  * trace root IS the agent: the run's model lands on the root span, an explicit
  * `defaultAgentName` is adopted as the framework root (so `run("app")` becomes
  * the `morse.app` label instead of a parent agent), and LLM / tool / sub-agent
- * spans parent straight to the root. `MORSE_AGENT_IDENTITY=legacy` keeps the
+ * spans parent straight to the root. `AMUND_AGENT_IDENTITY=legacy` keeps the
  * old extra span.
  */
 import { isLegacyIdentity } from "../_internal/agent-name";

@@ -1,11 +1,20 @@
 {
-  "name": "@morsehq/sdk",
+  "name": "@amund/sdk",
   "version": "0.8.1-rc.1",
-  "description": "Unified observability for AI agents and infrastructure. One SDK.",
+  "description": "Amund SDK: unified observability for AI agents and infrastructure. One SDK.",
   "license": "MIT",
-  "homepage": "https://morseai.dev",
-  "author": "Morse <hello@morseai.dev>",
+  "homepage": "https://amundai.com",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/MorseAI-HQ/amund-sdk-typescript.git",
+    "directory": "apps/sdk/typescript"
+  },
+  "bugs": {
+    "url": "https://github.com/MorseAI-HQ/amund-sdk-typescript/issues"
+  },
+  "author": "Amund (https://amundai.com)",
   "keywords": [
+    "amund",
     "observability",
     "ai-agents",
     "llm",
@@ -99,6 +108,7 @@
     "test": "vitest run",
     "contract": "tsx tests/contract/check.ts",
     "pack:published": "node scripts/pack-published.mjs",
+    "smoke:packed": "node scripts/smoke-packed.mjs",
     "bench:infra": "tsx benchmarks/infra-capture-overhead.ts",
     "dogfood:anthropic": "tsx dogfood/anthropic-agent-sdk.ts",
     "dogfood:openai": "tsx dogfood/openai-agents.ts",

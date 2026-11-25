@@ -1,7 +1,11 @@
 /**
- * `pnpm pack:published` (MHQ-1411): the helper must pack under the PUBLISHED
- * npm name (`@morsehq-dev/sdk`, as the release workflow rewrites it) without
- * touching the repo's package.json.
+ * `pnpm pack:published`: since the Amund rebrand a release packs and publishes TWO
+ * packages under their in-repo names, with no rename step:
+ *   - `@amund/sdk` (this package)
+ *   - `@morsehq-dev/sdk` (compat/morsehq-dev-sdk, a re-export shim)
+ * The shim's runtime behaviour is covered by compat/morsehq-dev-sdk/test and
+ * scripts/smoke-packed.mjs (both need a build); this file keeps the cheap
+ * static guarantees in the main suite.
  */
 import { execFileSync } from "node:child_process";
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
@@ -10,8 +14,14 @@ import { join } from "node:path";
 
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
-// @ts-expect-error plain .mjs helper without type declarations
-import { packPublished, publishedPackageName } from "../scripts/pack-published.mjs";
+import {
+  packDir,
+  publishedPackageName,
+  SDK_DIR,
+  SHIM_DIR,
+  tarballName,
+  // @ts-expect-error plain .mjs helper without type declarations
+} from "../scripts/pack-published.mjs";
 
 let work: string;
 beforeEach(() => {
@@ -21,32 +31,68 @@ afterEach(() => {
   rmSync(work, { recursive: true, force: true });
 });
 
+const readJson = (p: string) => JSON.parse(readFileSync(p, "utf8"));
+
 describe("pack:published", () => {
-  it("reads the published name from the release workflow", () => {
-    expect(publishedPackageName()).toBe("@morsehq-dev/sdk");
+  it("publishes the SDK as @amund/sdk and the shim as @morsehq-dev/sdk", () => {
+    expect(publishedPackageName()).toBe("@amund/sdk");
+    expect(publishedPackageName(SHIM_DIR)).toBe("@morsehq-dev/sdk");
+    expect(tarballName("@amund/sdk", "0.8.0")).toBe("amund-sdk-0.8.0.tgz");
   });
 
-  it("packs under the published name and leaves the source package.json untouched", () => {
-    const sdk = join(work, "sdk");
-    mkdirSync(join(sdk, "dist"), { recursive: true });
+  it("the release workflow no longer rewrites the package name", () => {
+    const wf = readFileSync(
+      join(SDK_DIR, "../../../.github/workflows/release-typescript.yml"),
+      "utf8",
+    );
+    expect(wf).not.toMatch(/pkg\.name\s*=/);
+    expect(wf).not.toMatch(/PUBLISHED_PACKAGE_NAME/);
+  });
+
+  it("packs a package directory as-is", () => {
+    const pkgDir = join(work, "pkg");
+    mkdirSync(join(pkgDir, "dist"), { recursive: true });
     const original =
       JSON.stringify(
-        { name: "@morsehq/sdk", version: "9.9.9", files: ["dist"], main: "./dist/index.js" },
+        { name: "@amund/fake", version: "9.9.9", files: ["dist"], main: "./dist/index.js" },
         null,
         2,
       ) + "\n";
-    writeFileSync(join(sdk, "package.json"), original);
-    writeFileSync(join(sdk, "dist", "index.js"), "export {};\n");
+    writeFileSync(join(pkgDir, "package.json"), original);
+    writeFileSync(join(pkgDir, "dist", "index.js"), "export {};\n");
 
     const outDir = join(work, "out");
-    const tarball = packPublished({ sdkDir: sdk, outDir, build: false });
+    const tarball = packDir({ dir: pkgDir, outDir });
 
-    expect(tarball.startsWith(outDir)).toBe(true);
+    expect(tarball).toBe(join(outDir, "amund-fake-9.9.9.tgz"));
     const manifest = JSON.parse(
       execFileSync("tar", ["-xOzf", tarball, "package/package.json"], { encoding: "utf8" }),
     );
-    expect(manifest.name).toBe("@morsehq-dev/sdk");
+    expect(manifest.name).toBe("@amund/fake");
     expect(manifest.version).toBe("9.9.9");
-    expect(readFileSync(join(sdk, "package.json"), "utf8")).toBe(original);
-  }, 60_000); // shells out to `npm pack`, slow on a loaded CI runner
+    expect(readFileSync(join(pkgDir, "package.json"), "utf8")).toBe(original);
+  }, 60_000); // shells out to `pnpm pack`, slow on a loaded CI runner
+});
+
+describe("@morsehq-dev/sdk shim stays in lockstep with @amund/sdk", () => {
+  const sdk = readJson(join(SDK_DIR, "package.json"));
+  const shim = readJson(join(SHIM_DIR, "package.json"));
+
+  it("mirrors the exports map exactly (every subpath, every condition)", () => {
+    expect(shim.exports).toEqual(sdk.exports);
+    expect(JSON.stringify(shim.exports)).toBe(JSON.stringify(sdk.exports)); // key order too
+    for (const k of ["main", "module", "types", "type"]) expect(shim[k]).toBe(sdk[k]);
+  });
+
+  it("has the same version and depends on exactly that @amund/sdk", () => {
+    expect(shim.version).toBe(sdk.version);
+    // `pnpm pack` turns workspace:* into the exact version (checked on the
+    // real tarball by scripts/smoke-packed.mjs).
+    expect(shim.dependencies).toEqual({ "@amund/sdk": "workspace:*" });
+  });
+
+  it("is publishable and ships only dist/", () => {
+    expect(shim.private).toBe(false);
+    expect(shim.files).toEqual(["dist"]);
+  });
 });

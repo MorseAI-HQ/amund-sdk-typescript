@@ -1,5 +1,5 @@
 /**
- * Dogfood: generic LangChain JS adapter (`@morsehq/sdk/langchain`).
+ * Dogfood: generic LangChain JS adapter (`@amund/sdk/langchain`).
  *
  * Runs a tiny real `ChatOpenAI` call through `@langchain/core` with a
  * `MorseCallbackHandler` attached, sends the trace to Morse dev, prints
@@ -7,11 +7,11 @@
  *
  * Required env:
  *   OPENAI_API_KEY
- *   MORSE_API_KEY  (dev dogfood org)
+ *   AMUND_API_KEY  (dev dogfood org)
  *
  * Optional:
  *   OPENAI_MODEL  (default: gpt-4o-mini)
- *   MORSE_ENDPOINT
+ *   AMUND_ENDPOINT
  */
 
 import { runAsync, getLastTrace } from "../src/_internal/tracing";

@@ -9,8 +9,8 @@
  *
  * Customer flow becomes:
  *
- *     npm install @morsehq-dev/sdk
- *     export MORSE_API_KEY=mhq_...
+ *     npm install @amund/sdk
+ *     export AMUND_API_KEY=mhq_...
  *     // ... existing @anthropic-ai/sdk / ai code is now traced ...
  *
  * No `morse.wrapAnthropic()` / `morse.instrumentAnthropic()` call required.
@@ -69,7 +69,7 @@
  * an adapter function that is itself idempotent (checks a sentinel on the
  * target module). Calling `installAdapters()` repeatedly is safe.
  *
- * Opt-out: `MORSE_DISABLE_AUTO_DETECT=1` skips this step entirely.
+ * Opt-out: `AMUND_DISABLE_AUTO_DETECT=1` skips this step entirely.
  * Customers can still call the adapter `wrapX()` / `instrumentX()`
  * functions directly.
  *
@@ -120,21 +120,20 @@ const FULL_INSTALL_TARGETS: Record<string, FullInstallTarget> = {
  * why silent auto-install isn't possible for these yet.
  */
 const DETECT_ONLY_TARGETS: Record<string, string> = {
-  "@openai/agents":
-    "wrapRunnerWithFullInstrumentation(runner) from '@morsehq-dev/sdk/openai-agents'",
+  "@openai/agents": "wrapRunnerWithFullInstrumentation(runner) from '@amund/sdk/openai-agents'",
   "@langchain/langgraph":
-    "new MorseCallbackHandler() from '@morsehq-dev/sdk/langgraph', passed via { callbacks: [...] }",
+    "new MorseCallbackHandler() from '@amund/sdk/langgraph', passed via { callbacks: [...] }",
   // MHQ-936: same shape as `ai` below. The package exports a top-level
   // `query` that is read-only and non-configurable, so it cannot be patched
   // in place; and it has no client class to patch a prototype on
   // (`ClaudeSDKClient` is the *Python* package's API and has never existed
   // here). wrapClaudeAgentQuery() returns a traced replacement instead.
   "@anthropic-ai/claude-agent-sdk":
-    "wrapClaudeAgentQuery(query) from '@morsehq-dev/sdk/anthropic-agent-sdk' — call its returned function in place of the package's own query()",
+    "wrapClaudeAgentQuery(query) from '@amund/sdk/anthropic-agent-sdk' — call its returned function in place of the package's own query()",
   // MHQ-758: `ai`'s exports can't be patched in place (frozen ESM getters,
   // no prototype to patch) — createTracedVercelAI() returns replacement
   // functions instead. See `../vercel-ai/index.ts`'s module doc.
-  ai: "createTracedVercelAI() from '@morsehq-dev/sdk/vercel-ai' — use its returned streamText/generateText/generateObject in place of ai's own",
+  ai: "createTracedVercelAI() from '@amund/sdk/vercel-ai' — use its returned streamText/generateText/generateObject in place of ai's own",
 };
 
 /* ------------------------------------------------------------------------ */
@@ -252,7 +251,7 @@ function uninstallLazyHook(): void {
  * Idempotent and safe to call repeatedly — every `morse.init()` (and the
  * env-based lazy auto-init path) goes through here.
  *
- * Honors `MORSE_DISABLE_AUTO_DETECT=1` and returns immediately. No-ops
+ * Honors `AMUND_DISABLE_AUTO_DETECT=1` and returns immediately. No-ops
  * outside Node (e.g. a browser bundle) since there is no `require` to hook.
  */
 export async function installAdapters(): Promise<void> {

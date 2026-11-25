@@ -2,102 +2,103 @@
 /**
  * `pnpm pack:published` — pack the SDK exactly as a release ships it.
  *
- * The in-repo package name is `@morsehq/sdk` (pnpm workspace id); the name on
- * npm is `@morsehq-dev/sdk`. `.github/workflows/release-typescript.yml`
- * rewrites `name` on a throwaway runner checkout right before `npm publish`.
- * A tarball packed straight from the repo therefore installs under the wrong
- * name, which is not what a release produces (MHQ-1411, dogfood round 2026-10-18).
+ * Since the Amund rebrand the in-repo name IS the published name (`@amund/sdk`),
+ * so there is no rename step any more (through 0.8.0 the release workflow rewrote
+ * `@morsehq/sdk` to `@morsehq-dev/sdk`, MHQ-1411). A release publishes TWO
+ * tarballs, both produced by `pnpm pack` (which pins the shim's
+ * `"@amund/sdk": "workspace:*"` dependency to the exact version):
  *
- * This script applies the SAME rewrite (`pkg.name = PUBLISHED_PACKAGE_NAME`,
- * re-serialised with `JSON.stringify(pkg, null, 2) + "\n"`), but on a staging
- * copy in the OS temp dir, so the repo's package.json is never modified. The
- * tarball is written outside the source tree.
+ *   - `@amund/sdk`         — this package
+ *   - `@morsehq-dev/sdk`   — the compatibility shim in compat/morsehq-dev-sdk/
+ *
+ * `.github/workflows/release-typescript.yml` calls this script, smoke-tests the
+ * tarballs with `scripts/smoke-packed.mjs`, and publishes those same files.
  *
  * Usage:
- *   pnpm pack:published                 # build, then pack into $TMPDIR/morse-sdk-published
- *   pnpm pack:published --no-build      # reuse an existing dist/
+ *   pnpm pack:published                 # build both, pack into $TMPDIR/amund-sdk-published
+ *   pnpm pack:published --no-build      # reuse existing dist/ folders
  *   pnpm pack:published --out <dir>     # choose the output directory
  *
- * Prints the absolute tarball path on the last line of stdout.
+ * Prints the two absolute tarball paths on the last two lines of stdout
+ * (`@amund/sdk` first, then the shim).
  */
 import { execFileSync } from "node:child_process";
-import {
-  cpSync,
-  existsSync,
-  mkdirSync,
-  mkdtempSync,
-  readFileSync,
-  rmSync,
-  writeFileSync,
-} from "node:fs";
+import { existsSync, mkdirSync, readFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
-const FALLBACK_PUBLISHED_NAME = "@morsehq-dev/sdk";
 const HERE = dirname(fileURLToPath(import.meta.url));
-const SDK_DIR = resolve(HERE, "..");
-const WORKFLOW = resolve(SDK_DIR, "../../../.github/workflows/release-typescript.yml");
+export const SDK_DIR = resolve(HERE, "..");
+export const SHIM_DIR = join(SDK_DIR, "compat", "morsehq-dev-sdk");
 
-/** Single source of truth is the release workflow's `PUBLISHED_PACKAGE_NAME`. */
-export function publishedPackageName(workflowPath = WORKFLOW) {
-  try {
-    const text = readFileSync(workflowPath, "utf8");
-    const m = text.match(/^\s*PUBLISHED_PACKAGE_NAME:\s*["']?([^"'\s#]+)["']?/m);
-    if (m) return m[1];
-  } catch {
-    // Workflow absent (e.g. the extracted SDK repo): fall through.
-  }
-  return FALLBACK_PUBLISHED_NAME;
+function readPkg(dir) {
+  return JSON.parse(readFileSync(join(dir, "package.json"), "utf8"));
+}
+
+/** The npm name a package directory publishes under (its package.json `name`). */
+export function publishedPackageName(dir = SDK_DIR) {
+  return readPkg(dir).name;
+}
+
+/** `@scope/name` + version -> the file name `npm pack` / `pnpm pack` writes. */
+export function tarballName(name, version) {
+  return `${name.replace(/^@/, "").replace("/", "-")}-${version}.tgz`;
 }
 
 /**
- * @param {{ sdkDir?: string, outDir?: string, build?: boolean, name?: string }} opts
- * @returns {string} absolute path to the packed tarball
+ * Pack one package directory with `pnpm pack` (so `workspace:` ranges are
+ * replaced by real versions, as `pnpm publish` would).
+ *
+ * @param {{ dir: string, outDir: string }} opts
+ * @returns {string} absolute path to the tarball
+ */
+export function packDir({ dir, outDir }) {
+  const pkg = readPkg(dir);
+  if (!existsSync(join(dir, "dist"))) {
+    throw new Error(`No dist/ in ${dir}. Build first (or run without --no-build).`);
+  }
+  const dest = resolve(outDir);
+  mkdirSync(dest, { recursive: true });
+  execFileSync("pnpm", ["pack", "--pack-destination", dest], {
+    cwd: dir,
+    stdio: ["ignore", "pipe", "inherit"],
+  });
+  const tarball = join(dest, tarballName(pkg.name, pkg.version));
+  if (!existsSync(tarball)) throw new Error(`pnpm pack did not write ${tarball}`);
+  return tarball;
+}
+
+/**
+ * Build (optionally) and pack `@amund/sdk` and the `@morsehq-dev/sdk` shim.
+ *
+ * @param {{ outDir?: string, build?: boolean, sdkDir?: string, shimDir?: string }} opts
+ * @returns {{ sdk: string, shim: string }} absolute tarball paths
  */
 export function packPublished({
-  sdkDir = SDK_DIR,
-  outDir = join(tmpdir(), "morse-sdk-published"),
+  outDir = join(tmpdir(), "amund-sdk-published"),
   build = true,
-  name = publishedPackageName(),
+  sdkDir = SDK_DIR,
+  shimDir = SHIM_DIR,
 } = {}) {
   if (build) {
     execFileSync("pnpm", ["run", "build"], { cwd: sdkDir, stdio: "inherit" });
+    execFileSync("pnpm", ["run", "build"], { cwd: shimDir, stdio: "inherit" });
   }
-  if (!existsSync(join(sdkDir, "dist"))) {
-    throw new Error(`No dist/ in ${sdkDir}. Run without --no-build (or run \`pnpm build\`).`);
-  }
-
-  const pkg = JSON.parse(readFileSync(join(sdkDir, "package.json"), "utf8"));
-  const stage = mkdtempSync(join(tmpdir(), "morse-sdk-stage-"));
-  try {
-    // Same rewrite as release-typescript.yml's "Rewrite package name" step.
-    pkg.name = name;
-    writeFileSync(join(stage, "package.json"), JSON.stringify(pkg, null, 2) + "\n");
-    cpSync(join(sdkDir, "dist"), join(stage, "dist"), { recursive: true });
-    for (const f of ["README.md", "LICENSE", "CHANGELOG.md"]) {
-      if (existsSync(join(sdkDir, f))) cpSync(join(sdkDir, f), join(stage, f));
-    }
-
-    mkdirSync(outDir, { recursive: true });
-    const out = execFileSync("npm", ["pack", "--pack-destination", resolve(outDir), "--json"], {
-      cwd: stage,
-      encoding: "utf8",
-    });
-    const filename = JSON.parse(out)[0].filename;
-    return join(resolve(outDir), filename);
-  } finally {
-    rmSync(stage, { recursive: true, force: true });
-  }
+  return {
+    sdk: packDir({ dir: sdkDir, outDir }),
+    shim: packDir({ dir: shimDir, outDir }),
+  };
 }
 
 if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
   const args = process.argv.slice(2);
   const outIdx = args.indexOf("--out");
-  const tarball = packPublished({
+  const { sdk, shim } = packPublished({
     build: !args.includes("--no-build"),
     ...(outIdx >= 0 && args[outIdx + 1] ? { outDir: args[outIdx + 1] } : {}),
   });
-  console.log(`\nPacked as ${publishedPackageName()}:`);
-  console.log(tarball);
+  console.log(`\nPacked ${publishedPackageName(SDK_DIR)} and ${publishedPackageName(SHIM_DIR)}:`);
+  console.log(sdk);
+  console.log(shim);
 }

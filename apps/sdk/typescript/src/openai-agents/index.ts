@@ -1,5 +1,5 @@
 /**
- * `@morsehq-dev/sdk/openai-agents` — adapter for `@openai/agents`.
+ * `@amund/sdk/openai-agents` — adapter for `@openai/agents`.
  *
  * Wave 3-O composes the W2-O surfaces (`runner-wrapper`, `llm-and-tool`,
  * `handoff`, `guardrail`) into a single public entry point.

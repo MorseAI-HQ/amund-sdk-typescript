@@ -2,3 +2,4 @@ packages:
   - "apps/sdk/typescript"
   - "packages/config-eslint"
   - "packages/config-ts"
+  - "apps/sdk/typescript/compat/morsehq-dev-sdk"

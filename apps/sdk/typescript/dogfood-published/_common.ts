@@ -1,16 +1,17 @@
 /**
  * Published-package variant of apps/sdk/typescript/dogfood/_common.ts.
- * Imports ONLY the public entrypoints of the npm-published @morsehq-dev/sdk —
+ * Imports ONLY the public entrypoints of the npm-published @amund/sdk —
  * no workspace source, no internal modules.
  */
-import * as morse from "@morsehq-dev/sdk";
+import * as morse from "@amund/sdk";
 
 export const DEV_ENDPOINT_DEFAULT = "https://dev-api.morsehq.dev/api/v1/traces/batch";
 
+/** `name` is unprefixed (`"API_KEY"`): reads `AMUND_<name>`, then the pre-rebrand `MORSE_<name>`. */
 export function requireEnv(name: string): string {
-  const v = process.env[name];
+  const v = process.env[`AMUND_${name}`]?.trim() || process.env[`MORSE_${name}`];
   if (!v) {
-    console.error(`\nMissing env var: ${name}\n`);
+    console.error(`\nMissing env var: AMUND_${name} (or MORSE_${name})\n`);
     process.exit(2);
   }
   return v;
@@ -20,8 +21,9 @@ export async function runDogfood(
   serviceName: string,
   body: () => Promise<{ outcome?: string }>,
 ): Promise<void> {
-  const apiKey = requireEnv("MORSE_API_KEY");
-  const endpoint = process.env.MORSE_ENDPOINT || DEV_ENDPOINT_DEFAULT;
+  const apiKey = requireEnv("API_KEY");
+  const endpoint =
+    process.env.AMUND_ENDPOINT?.trim() || process.env.MORSE_ENDPOINT || DEV_ENDPOINT_DEFAULT;
   morse.init({ apiKey, endpoint, flushIntervalSeconds: 1 });
   console.log(`\n[pub-e2e] ${serviceName}  sdk=${morse.version}  endpoint=${endpoint}`);
 

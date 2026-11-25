@@ -76,7 +76,7 @@ export function _setEnsureInitialized(fn: () => void): void {
 
 function logImpl(message: string, options: LogOptions = {}): void {
   // Match Python semantics: env-driven auto-init kicks in if the SDK
-  // hasn't been explicitly init()'d yet but MORSE_API_KEY is set.
+  // hasn't been explicitly init()'d yet but AMUND_API_KEY is set.
   ensureInitialized();
   const transport: TransportLike | null = getTransport();
   if (transport === null) {
@@ -143,14 +143,14 @@ function logImpl(message: string, options: LogOptions = {}): void {
  * transport — flushes at the SDK's configured interval (default 2s).
  * Internal errors are absorbed; this call never throws.
  *
- * Silent no-op when the SDK isn't initialised (no `MORSE_API_KEY`
+ * Silent no-op when the SDK isn't initialised (no `AMUND_API_KEY`
  * and no explicit `init()` call).
  *
  * @example
  * ```ts
- * import { init, runTraced, log } from "@morsehq-dev/sdk";
+ * import { init, runTraced, log } from "@amund/sdk";
  *
- * init({ apiKey: process.env.MORSE_API_KEY });
+ * init({ apiKey: process.env.AMUND_API_KEY });
  *
  * await runTraced({ agentName: "lead-qualifier" }, async () => {
  *   log("starting search", { attributes: { query: "morse" } });

@@ -16,7 +16,8 @@ import {
   _resetForTesting as resetDiagnostics,
 } from "../src/_internal/diagnostics";
 
-const WARNING = "run(s) not sent: no API key (set MORSE_API_KEY or call init())";
+const WARNING =
+  "run(s) not sent: no API key (set AMUND_API_KEY or call init(); MORSE_API_KEY still works)";
 
 let warn: ReturnType<typeof vi.spyOn>;
 

@@ -81,7 +81,7 @@ GHSA-86w9-cpqp-85rv
 # zod 3 production paths (pnpm why zod@3.25.76 -r --prod, 2026-10-24):
 #   apps/web, apps/mobile -> @morsehq/validation -> zod 3
 #   apps/web (direct), apps/docs -> nextra -> zod 3
-#   @morsehq/sdk -> @anthropic-ai/sdk | openai -> zod (peer)
+#   @amund/sdk -> @anthropic-ai/sdk | openai -> zod (peer)
 #
 # ACCEPT rationale: the exploit needs an attacker-sent large array parsed by a
 # z.array() schema. No zod 3 schema in this repo has an array, set, record or

@@ -1,16 +1,16 @@
 /**
- * Dogfood: raw OpenAI SDK adapter (`@morsehq/sdk/openai`).
+ * Dogfood: raw OpenAI SDK adapter (`@amund/sdk/openai`).
  *
  * Wraps a plain `openai` client and makes one `chat.completions.create`
  * call, sends the trace to Morse dev, prints the trace id, exits.
  *
  * Required env:
  *   OPENAI_API_KEY
- *   MORSE_API_KEY  (dev dogfood org)
+ *   AMUND_API_KEY  (dev dogfood org)
  *
  * Optional:
  *   OPENAI_MODEL  (default: gpt-4o-mini)
- *   MORSE_ENDPOINT
+ *   AMUND_ENDPOINT
  */
 
 import { runAsync, getLastTrace } from "../src/_internal/tracing";

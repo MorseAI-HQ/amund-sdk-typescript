@@ -1,6 +1,7 @@
 # Changelog
 
-All notable changes to `@morsehq-dev/sdk` are documented here.
+All notable changes to `@amund/sdk` (published as `@morsehq-dev/sdk` through 0.8.0) are
+documented here.
 
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
@@ -10,6 +11,41 @@ their first public release because they reached feature parity there, not
 because they are released in lockstep. Expect the numbers to diverge.
 
 ## [Unreleased]
+
+### Changed — published as `@amund/sdk` (Morse is now Amund)
+
+- **The package is now `@amund/sdk`** (npm org `amund`, founder decision 2026-11-25). The
+  in-repo workspace name is the published name, so the release workflow no longer rewrites
+  `package.json`. Migrate by swapping the dependency and replacing `@morsehq-dev/sdk` with
+  `@amund/sdk` in imports; every subpath (`/anthropic`, `/openai`, `/vercel-ai`, …) and the
+  whole API are unchanged.
+- **`@morsehq-dev/sdk` keeps working** as a compatibility package
+  (`compat/morsehq-dev-sdk/`), released at the same version and depending on exactly that
+  `@amund/sdk` version. Its `exports` map is a copy of `@amund/sdk`'s (ESM, CJS, types and
+  `browser` conditions); every entry point is a one-line re-export, so both names hand back
+  the same module instances (one SDK singleton, one transport). Importing it prints one
+  deprecation notice per process naming `@amund/sdk`; the notice stays quiet under
+  `NODE_NO_WARNINGS=1`, `--no-deprecation`, or `AMUND_DISABLED` / `MORSE_DISABLED`.
+- **Environment variables are `AMUND_*`, with `MORSE_*` still read.** Every variable the SDK
+  reads (`AMUND_API_KEY`, `AMUND_ENDPOINT`, `AMUND_DISABLED`, `AMUND_CAPTURE_*`,
+  `AMUND_GIT_REVISION`, `AMUND_AGENT_IDENTITY`, `AMUND_PROPAGATE_TRACE_CONTEXT`, …) is looked
+  up as `AMUND_<NAME>` first and falls back to `MORSE_<NAME>`. When both are set, `AMUND_*`
+  wins; an empty or whitespace-only `AMUND_*` counts as unset. Existing deployments need no
+  change. The lookup lives in one helper (`_internal/env.ts::readSdkEnv`).
+- Local warnings name the product as Amund and the key variable as `AMUND_API_KEY` (or
+  `MORSE_API_KEY`). The `morse:` log prefix is unchanged.
+- Self-diagnostics recognise stack frames under `node_modules/@amund/sdk/` as SDK frames (the
+  old `@morsehq-dev/sdk` and `@morsehq/sdk` paths are still recognised).
+- `package.json`: homepage https://amundai.com, repository
+  https://github.com/MorseAI-HQ/amund-sdk-typescript.
+
+**Unchanged on the wire:** span and resource attribute keys (`morse.*`, `morse_ai.*`),
+`X-Morse-*` response headers, the `User-Agent` (`morse-typescript/<version>`), the
+OpenTelemetry tracer name (`morse-typescript`) and instrumentation scope names, the
+`log()` default `service_name` (`morse-sdk-ts`), diagnostics fingerprints, the `mhq_` API key
+format and the default endpoint behaviour (unchanged from 0.8.1-rc.1 below). Exported
+identifiers (`MorseCallbackHandler`, `morseTelemetry`, `morseTracer`,
+`morsePinoDestination`, …) keep their names.
 
 ## [0.8.1-rc.1] — 2026-11-25
 

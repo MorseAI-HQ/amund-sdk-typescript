@@ -1,13 +1,13 @@
 /**
- * `@morsehq-dev/sdk/langchain` — adapter for plain `@langchain/core` (chains,
- * LLMs, tools, retrievers) as distinct from `@morsehq-dev/sdk/langgraph`
+ * `@amund/sdk/langchain` — adapter for plain `@langchain/core` (chains,
+ * LLMs, tools, retrievers) as distinct from `@amund/sdk/langgraph`
  * (LangGraph's graph-execution model).
  *
  * MHQ-482: port of `apps/sdk/python/src/morse_ai/adapters/langchain.py`.
  *
  * ```ts
- * import { MorseCallbackHandler } from "@morsehq-dev/sdk/langchain";
- * import * as morse from "@morsehq-dev/sdk";
+ * import { MorseCallbackHandler } from "@amund/sdk/langchain";
+ * import * as morse from "@amund/sdk";
  *
  * const handler = new MorseCallbackHandler({ agentName: "my-agent" });
  * await morse.run({ agentName: "my-agent" }, async () => {

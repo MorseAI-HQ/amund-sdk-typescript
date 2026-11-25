@@ -6,7 +6,7 @@
  *   - trace_id : 32 lowercase hex chars (128-bit)
  *   - span_id  : 16 lowercase hex chars (64-bit)
  *   - flags    : "01" sampled / "00" not sampled, from the SDK's real head-sampling
- *                decision for the trace (`MORSE_SAMPLE_RATE`)
+ *                decision for the trace (`AMUND_SAMPLE_RATE`)
  *
  * Example: `00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01`
  *
@@ -14,6 +14,7 @@
  *   https://www.w3.org/TR/trace-context/
  */
 
+import { readSdkEnv } from "./_internal/env";
 import { getEngine as getOtelEngine } from "./_internal/otel-provider";
 import { otelSpanIdFor } from "./_internal/span-ids";
 import { getActiveTraceState } from "./_internal/tracing";
@@ -93,17 +94,16 @@ export function setPropagateDefault(value: boolean | undefined): void {
 }
 
 /**
- * False when `MORSE_PROPAGATE_TRACE_CONTEXT` is `false`/`0`/`no`/`off` (Node only)
+ * False when `AMUND_PROPAGATE_TRACE_CONTEXT` (or `MORSE_PROPAGATE_TRACE_CONTEXT`) is
+ * `false`/`0`/`no`/`off`
  * or `init({ propagateTraceContext: false })` was called.
  */
 export function propagationEnabled(): boolean {
   try {
-    if (typeof process !== "undefined" && process.env) {
-      const raw = (process.env.MORSE_PROPAGATE_TRACE_CONTEXT ?? "").trim().toLowerCase();
-      if (raw === "false" || raw === "0" || raw === "no" || raw === "off") return false;
-    }
+    const raw = (readSdkEnv("PROPAGATE_TRACE_CONTEXT") ?? "").trim().toLowerCase();
+    if (raw === "false" || raw === "0" || raw === "no" || raw === "off") return false;
   } catch {
-    // no process in this runtime: the env var cannot be set
+    // no env in this runtime: the env var cannot be set
   }
   return initPropagate !== false;
 }

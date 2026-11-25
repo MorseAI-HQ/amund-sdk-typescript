@@ -160,9 +160,9 @@ const CHANNELS: Array<[string, (message: unknown) => void]> = [
  * Start recording HTTP client calls made inside an active trace. Idempotent
  * (a second call replaces the exclusion set and subscribes once).
  *
- * @param endpoint The Morse ingest URL in use, so it is never traced. Every
+ * @param endpoint The Amund ingest URL in use, so it is never traced. Every
  *   production API host (`api.amundai.com`, `api.morseai.dev`) and
- *   `MORSE_ENDPOINT` are always excluded as well.
+ *   `AMUND_ENDPOINT` / `MORSE_ENDPOINT` are always excluded as well.
  */
 export function enableHttpCapture(
   opts: { endpoint?: string; extraExcludedHosts?: string[] } = {},

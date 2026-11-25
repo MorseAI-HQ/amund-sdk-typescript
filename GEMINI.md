@@ -15,7 +15,7 @@ If `../morse-bizops/GEMINI.md` was not auto-inlined (for example, in a standalon
 
 ## 2. Repo Scope & Local Authoritative Docs (`morse-sdk-typescript`)
 
-- **Role:** TypeScript SDK (`@morsehq-dev/sdk` on npm) and Vercel AI SDK adapter.
+- **Role:** TypeScript SDK (`@amund/sdk` on npm) and Vercel AI SDK adapter.
 - **Read locally:**
 - `README.md`
 - `apps/sdk/typescript/CLAUDE.md`

@@ -247,7 +247,7 @@ export function withOtelSpanContext<T>(traceIdHex: string, spanIdHex: string, fn
 // module's `_DEFAULT_*` constants.
 
 /* ------------------------------------------------------------------------ */
-/*  Byte-cap helpers (applied at attribute-set time — MORSE_MAX_FIELD_BYTES) */
+/*  Byte-cap helpers (applied at attribute-set time — AMUND_MAX_FIELD_BYTES) */
 /* ------------------------------------------------------------------------ */
 
 /**

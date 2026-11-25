@@ -1,5 +1,5 @@
 /**
- * `@morsehq-dev/sdk/vercel-ai` — Vercel AI SDK instrumentation.
+ * `@amund/sdk/vercel-ai` — Vercel AI SDK instrumentation.
  *
  * Mirrors the Python adapters' contract from
  * `openspec/changes/phase-6c-multi-sdk-dogfood/specs/sdk/spec.md`:
@@ -102,7 +102,7 @@ export interface InstrumentVercelAIOptions {
    * Default `true` (MHQ-1880). Calls made inside an active trace pass a W3C
    * `traceparent` in the call's `headers` option, naming the `llm` span, so a gateway
    * that forwards it joins the trace. A `traceparent` you set is never replaced.
-   * `false` sends nothing; `MORSE_PROPAGATE_TRACE_CONTEXT=false` does the same globally.
+   * `false` sends nothing; `AMUND_PROPAGATE_TRACE_CONTEXT=false` does the same globally.
    */
   propagateTraceContext?: boolean;
 }
@@ -125,7 +125,7 @@ export interface TracedVercelAI {
  * in place; see the module doc comment above).
  *
  * ```ts
- * import { createTracedVercelAI } from "@morsehq-dev/sdk/vercel-ai";
+ * import { createTracedVercelAI } from "@amund/sdk/vercel-ai";
  * const { streamText } = await createTracedVercelAI();
  * // use streamText(...) exactly like ai's own streamText(...)
  * ```

@@ -25,7 +25,7 @@
  *
  * What the engine applies to these spans
  * --------------------------------------
- *  - Sampling: `ParentBased(TraceIdRatioBased(MORSE_SAMPLE_RATE))`. A root AI
+ *  - Sampling: `ParentBased(TraceIdRatioBased(AMUND_SAMPLE_RATE))`. A root AI
  *    SDK span is sampled by trace id; its children follow it. Inside
  *    `morse.run()` the parent is Morse's synthetic span context, whose
  *    sampled flag came from the same ratio, so the decision is shared.
@@ -138,8 +138,8 @@ function warnOnce(message: string): void {
 
 function unavailableReason(): string {
   return isOtelAvailable()
-    ? "Morse is not initialised, so AI SDK telemetry is switched off for this call — call " +
-        "morse.init({ apiKey }) (or set MORSE_API_KEY and run it once) before the first AI SDK call."
+    ? "Amund is not initialised, so AI SDK telemetry is switched off for this call — call " +
+        "morse.init({ apiKey }) (or set AMUND_API_KEY, or MORSE_API_KEY, and run it once) before the first AI SDK call."
     : "this is the browser build, where the OTLP span pipeline does not exist, so AI SDK " +
         "telemetry is switched off — use morseTelemetry() in server-side code.";
 }
@@ -241,7 +241,7 @@ class MorseScopedTracer implements Tracer {
 /* ------------------------------------------------------------------------ */
 
 /**
- * A `Tracer` that records into Morse's pipeline, for anything that accepts
+ * A `Tracer` that records into Amund's pipeline, for anything that accepts
  * one: `new LegacyOpenTelemetry({ tracer: morseTracer() })`, or the pre-v7
  * `experimental_telemetry: { isEnabled: true, tracer: morseTracer() }`.
  *
@@ -255,12 +255,12 @@ export function morseTracer(options: MorseTracerOptions = {}): Tracer {
 
 /**
  * Settings for the AI SDK's own telemetry that route its OpenTelemetry spans
- * to Morse — use it where you would otherwise pass `telemetry`:
+ * to Amund — use it where you would otherwise pass `telemetry`:
  *
  * ```ts
  * import { generateText } from "ai";
  * import { LegacyOpenTelemetry } from "@ai-sdk/otel";
- * import { morseTelemetry } from "@morsehq-dev/sdk/vercel-ai";
+ * import { morseTelemetry } from "@amund/sdk/vercel-ai";
  *
  * await generateText({
  *   model,

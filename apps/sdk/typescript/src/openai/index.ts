@@ -1,5 +1,5 @@
 /**
- * `@morsehq-dev/sdk/openai` — plain OpenAI SDK instrumentation.
+ * `@amund/sdk/openai` — plain OpenAI SDK instrumentation.
  *
  * Wraps a raw `openai` npm package client (`new OpenAI()` /
  * `new AzureOpenAI()` / any structurally-compatible client) so every
@@ -22,7 +22,7 @@
  * `_internal/auto-detect.ts` and Python's `_internal/auto_detect.py`
  * `_adapter_targets()`, which both omit bare `openai`).
  *
- * Distinct from `@morsehq-dev/sdk/openai-agents`, which instruments the
+ * Distinct from `@amund/sdk/openai-agents`, which instruments the
  * `@openai/agents` Agents SDK (a different package with its own Runner /
  * Agent abstractions). This module is for customers calling
  * `openai.chat.completions.create` directly.
@@ -188,7 +188,7 @@ export interface WrapOpenAiOptions {
    * Default `true` (MHQ-1880). Calls made inside an active trace send a W3C
    * `traceparent` request header naming the call's `llm` span, so a gateway that
    * forwards it joins the trace. A `traceparent` you set is never replaced.
-   * `false` sends nothing; `MORSE_PROPAGATE_TRACE_CONTEXT=false` does the same globally.
+   * `false` sends nothing; `AMUND_PROPAGATE_TRACE_CONTEXT=false` does the same globally.
    */
   propagateTraceContext?: boolean;
 }
@@ -203,7 +203,7 @@ export interface WrapOpenAiOptions {
  *
  * @example
  * ```ts
- * import { wrapOpenAI } from "@morsehq-dev/sdk/openai";
+ * import { wrapOpenAI } from "@amund/sdk/openai";
  * import OpenAI from "openai";
  *
  * const client = wrapOpenAI(new OpenAI());

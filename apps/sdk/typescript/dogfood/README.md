@@ -20,9 +20,9 @@ Three single-shot scripts that exercise the new TS agent-SDK adapters against re
 2. Morse dogfood org API key for the dev env:
 
    ```sh
-   export MORSE_API_KEY=mhq_dev_...
+   export AMUND_API_KEY=mhq_dev_...
    # Optional — defaults to the Railway dev URL below.
-   export MORSE_ENDPOINT=https://api.morseai.dev/api/v1/traces/batch
+   export AMUND_ENDPOINT=https://api.morseai.dev/api/v1/traces/batch
    ```
 
 3. SDK deps installed:

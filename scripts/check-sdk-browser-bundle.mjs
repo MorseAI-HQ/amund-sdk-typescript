@@ -94,7 +94,7 @@ function* walk(dir) {
 if (!existsSync(BROWSER_DIST)) {
   console.error(
     `check-sdk-browser-bundle: ${relative(REPO_ROOT, BROWSER_DIST)} not found — ` +
-      "build the SDK first (pnpm --filter @morsehq/sdk build).",
+      "build the SDK first (pnpm --filter @amund/sdk build).",
   );
   process.exit(1);
 }

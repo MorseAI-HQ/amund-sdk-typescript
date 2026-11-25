@@ -1,0 +1,106 @@
+{
+  "name": "@morsehq-dev/sdk",
+  "version": "0.8.1-rc.1",
+  "description": "Deprecated: Morse is now Amund. This package re-exports @amund/sdk; install @amund/sdk instead.",
+  "license": "MIT",
+  "homepage": "https://amundai.com",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/MorseAI-HQ/amund-sdk-typescript.git",
+    "directory": "apps/sdk/typescript/compat/morsehq-dev-sdk"
+  },
+  "bugs": {
+    "url": "https://github.com/MorseAI-HQ/amund-sdk-typescript/issues"
+  },
+  "author": "Amund (https://amundai.com)",
+  "keywords": [
+    "amund",
+    "morse",
+    "deprecated"
+  ],
+  "private": false,
+  "type": "module",
+  "main": "./dist/index.cjs",
+  "module": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "files": [
+    "dist"
+  ],
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "browser": "./dist/browser/index.js",
+      "import": "./dist/index.js",
+      "require": "./dist/index.cjs",
+      "default": "./dist/index.js"
+    },
+    "./vercel-ai": {
+      "types": "./dist/vercel-ai/index.d.ts",
+      "browser": "./dist/browser/vercel-ai/index.js",
+      "import": "./dist/vercel-ai/index.js",
+      "require": "./dist/vercel-ai/index.cjs",
+      "default": "./dist/vercel-ai/index.js"
+    },
+    "./anthropic": {
+      "types": "./dist/anthropic/index.d.ts",
+      "browser": "./dist/browser/anthropic/index.js",
+      "import": "./dist/anthropic/index.js",
+      "require": "./dist/anthropic/index.cjs",
+      "default": "./dist/anthropic/index.js"
+    },
+    "./openai": {
+      "types": "./dist/openai/index.d.ts",
+      "browser": "./dist/browser/openai/index.js",
+      "import": "./dist/openai/index.js",
+      "require": "./dist/openai/index.cjs",
+      "default": "./dist/openai/index.js"
+    },
+    "./anthropic-agent-sdk": {
+      "types": "./dist/anthropic-agent-sdk/index.d.ts",
+      "browser": "./dist/browser/anthropic-agent-sdk/index.js",
+      "import": "./dist/anthropic-agent-sdk/index.js",
+      "require": "./dist/anthropic-agent-sdk/index.cjs",
+      "default": "./dist/anthropic-agent-sdk/index.js"
+    },
+    "./openai-agents": {
+      "types": "./dist/openai-agents/index.d.ts",
+      "browser": "./dist/browser/openai-agents/index.js",
+      "import": "./dist/openai-agents/index.js",
+      "require": "./dist/openai-agents/index.cjs",
+      "default": "./dist/openai-agents/index.js"
+    },
+    "./langgraph": {
+      "types": "./dist/langgraph/index.d.ts",
+      "browser": "./dist/browser/langgraph/index.js",
+      "import": "./dist/langgraph/index.js",
+      "require": "./dist/langgraph/index.cjs",
+      "default": "./dist/langgraph/index.js"
+    },
+    "./langchain": {
+      "types": "./dist/langchain/index.d.ts",
+      "browser": "./dist/browser/langchain/index.js",
+      "import": "./dist/langchain/index.js",
+      "require": "./dist/langchain/index.cjs",
+      "default": "./dist/langchain/index.js"
+    },
+    "./integrations/pino": {
+      "types": "./dist/integrations/pino.d.ts",
+      "browser": "./dist/browser/integrations/pino.js",
+      "import": "./dist/integrations/pino.js",
+      "require": "./dist/integrations/pino.cjs",
+      "default": "./dist/integrations/pino.js"
+    },
+    "./package.json": "./package.json"
+  },
+  "sideEffects": [
+    "./dist/_deprecation.js",
+    "./dist/_deprecation.cjs"
+  ],
+  "scripts": {
+    "build": "node scripts/build.mjs",
+    "test": "node --test test/shim-smoke.mjs"
+  },
+  "dependencies": {
+    "@amund/sdk": "workspace:*"
+  }
+}
