@@ -44,13 +44,23 @@
  */
 
 /**
- * Default ingestion endpoint.
- *
- * Production API host (morseai.dev since 0.7.2; api.morsehq.dev stays served for
- * older installs and explicit MORSE_ENDPOINT). Mirrors the Python SDK constant in
- * `apps/sdk/python/src/morse/client.py`.
+ * Production API host. `api.amundai.com` is the default since 0.8.1;
+ * `api.morseai.dev` (the default from 0.7.2 to 0.8.0) is a permanent alias for the
+ * same service, so a `MORSE_ENDPOINT` pinned to it keeps working.
  */
-export const DEFAULT_ENDPOINT = "https://api.morseai.dev/api/v1/traces/batch";
+export const DEFAULT_API_HOST = "api.amundai.com";
+
+/**
+ * Every host that serves the production API. Used where the SDK has to
+ * recognise its own backend (HTTP auto-capture never traces the SDK's own POSTs).
+ */
+export const PROD_API_HOSTS: readonly string[] = ["api.amundai.com", "api.morseai.dev"];
+
+/**
+ * Default ingestion endpoint. Mirrors the Python SDK constant in
+ * `morse_ai/_internal/env.py`.
+ */
+export const DEFAULT_ENDPOINT = `https://${DEFAULT_API_HOST}/api/v1/traces/batch`;
 
 /**
  * Read an env var in a runtime-agnostic way.

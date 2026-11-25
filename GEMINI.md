@@ -21,7 +21,7 @@ If `../morse-bizops/GEMINI.md` was not auto-inlined (for example, in a standalon
 - `apps/sdk/typescript/CLAUDE.md`
 - `apps/sdk/typescript/README.md`
 
-Discuss approach options with the founder before changing the public SDK contract. `api.morsehq.dev` stays supported indefinitely.
+Discuss approach options with the founder before changing the public SDK contract. The default API host is `api.amundai.com`; `api.morseai.dev` stays a supported alias for the same service. `api.morsehq.dev` is no longer a production host (founder decision 2026-11-24).
 
 ## 3. Shared Agent Ledger (MANDATORY — Every Session, Every Machine)
 

@@ -128,7 +128,7 @@ const REASON_HINTS: Record<string, string> = {
 export interface DropDetail {
   /** HTTP status the server answered with (401/403 for a rejected key). */
   status?: number;
-  /** Host the SDK was sending to, e.g. `api.morseai.dev`. */
+  /** Host the SDK was sending to, e.g. `api.amundai.com`. */
   host?: string;
   /** The send failed at the network layer (DNS, refused, reset, timeout), not with an HTTP answer. */
   unreachable?: boolean;
