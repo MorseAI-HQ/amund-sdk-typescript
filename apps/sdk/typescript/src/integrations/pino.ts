@@ -1,5 +1,5 @@
 /**
- * Phase 12.5 Tier 1.2 stretch — minimal pino transport for Morse.
+ * Phase 12.5 Tier 1.2 stretch — minimal pino transport for Amund (formerly Morse).
  *
  * Forwards pino log records through `morse.log()`, which batches
  * them onto the existing telemetry transport and ships them to the
@@ -10,7 +10,7 @@
  *
  * ```ts
  * import pino from "pino";
- * import { morsePinoDestination } from "@morsehq-dev/sdk/integrations/pino";
+ * import { morsePinoDestination } from "@amund/sdk/integrations/pino";
  *
  * const logger = pino(
  *   { level: "info" },

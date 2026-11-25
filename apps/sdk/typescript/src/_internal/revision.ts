@@ -8,7 +8,8 @@
  *
  * Git revision, first match wins:
  *
- *   1. `MORSE_GIT_REVISION`      — explicit override; the Docker-image answer
+ *   1. `AMUND_GIT_REVISION`      — explicit override; the Docker-image answer
+ *      (then the pre-rebrand `MORSE_GIT_REVISION`)
  *   2. `GITHUB_SHA`              — GitHub Actions
  *   3. `CI_COMMIT_SHA`           — GitLab CI
  *   4. `RAILWAY_GIT_COMMIT_SHA`  — Railway
@@ -30,9 +31,11 @@
  * Nothing here ever throws into the host application.
  */
 
+import { sdkEnvNames } from "./env";
+
 /** Env vars consulted for the revision, in precedence order. */
 export const GIT_REVISION_ENV_VARS: readonly string[] = [
-  "MORSE_GIT_REVISION",
+  ...sdkEnvNames("GIT_REVISION"),
   "GITHUB_SHA",
   "CI_COMMIT_SHA",
   "RAILWAY_GIT_COMMIT_SHA",

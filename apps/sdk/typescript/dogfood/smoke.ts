@@ -42,9 +42,9 @@
  * `apps/api/tests/traces/`.
  *
  * Env:
- *   MORSE_API_KEY    — a throwaway dev environment key (NEVER the dogfood
+ *   AMUND_API_KEY    — a throwaway dev environment key (NEVER the dogfood
  *                      account's key)
- *   MORSE_ENDPOINT   — full `/api/v1/traces/batch` URL
+ *   AMUND_ENDPOINT   — full `/api/v1/traces/batch` URL
  *
  * Both are wired in CI via the `CI_SDK_SMOKE_API_KEY` /
  * `CI_SDK_SMOKE_ENDPOINT` repo secrets (key = a throwaway environment key
@@ -53,7 +53,7 @@
  * 2026-07-27, which was actively misleading — see memory/decisions.md).
  *
  * Local usage:
- *   MORSE_API_KEY=mhq_... pnpm dogfood:smoke
+ *   AMUND_API_KEY=mhq_... pnpm dogfood:smoke
  *
  * See `openspec/changes/2026-05-27-sdk-wire-format-contract-tests/`.
  */
@@ -139,7 +139,7 @@ async function assertSpanTypesAccepted(
   const knownTypes = Object.values(SpanType).join(", ");
   if (events.length === 0) {
     console.error(
-      "[smoke] ❌ span-type matrix captured nothing — the MORSE_LEGACY_TRANSPORT toggle no longer\n" +
+      "[smoke] ❌ span-type matrix captured nothing — the AMUND_LEGACY_TRANSPORT toggle no longer\n" +
         "  routes run()/spanAsync() through the JSON transport, so this scenario is asserting on an\n" +
         "  empty batch. That is the exact failure mode MHQ-1033 fixed; do not 'fix' it by relaxing\n" +
         "  the assertion. See _internal/tracing.ts::sendTrace.",
@@ -276,10 +276,13 @@ async function assertAnthropicLlmSpanAccepted(
   );
 }
 
+/** `name` is unprefixed (`"API_KEY"`): reads `AMUND_<name>`, then the pre-rebrand `MORSE_<name>`. */
 function requireEnv(name: string, hint?: string): string {
-  const v = process.env[name];
+  const v = process.env[`AMUND_${name}`]?.trim() || process.env[`MORSE_${name}`];
   if (!v || v.length === 0) {
-    console.error(`\n[smoke] missing env var: ${name}${hint ? `\n  ${hint}` : ""}\n`);
+    console.error(
+      `\n[smoke] missing env var: AMUND_${name} (or MORSE_${name})${hint ? `\n  ${hint}` : ""}\n`,
+    );
     process.exit(2);
   }
   return v;
@@ -287,10 +290,11 @@ function requireEnv(name: string, hint?: string): string {
 
 async function main(): Promise<void> {
   const apiKey = requireEnv(
-    "MORSE_API_KEY",
+    "API_KEY",
     "Use a throwaway dev environment key (CI: CI_SDK_SMOKE_API_KEY).",
   );
-  const endpoint = process.env.MORSE_ENDPOINT || DEV_ENDPOINT_DEFAULT;
+  const endpoint =
+    process.env.AMUND_ENDPOINT?.trim() || process.env.AMUND_ENDPOINT || DEV_ENDPOINT_DEFAULT;
   console.log(`[smoke] endpoint=${endpoint}`);
 
   // Wire up the SDK as a real customer would, but inject a capture-only
@@ -299,7 +303,7 @@ async function main(): Promise<void> {
   // `buildSingleton()` time, not `_internal/tracing.ts`'s separately
   // swappable module-level `transport` var — actually route through it.
   // (`setTransport()` from `_internal/tracing.ts` only affects the legacy
-  // `MORSE_LEGACY_TRANSPORT=1` trace-emission path, NOT `track()` — using
+  // `AMUND_LEGACY_TRANSPORT=1` trace-emission path, NOT `track()` — using
   // it here after `init()` silently captured nothing for scenario 3 below;
   // caught live against dev-api on 2026-07-28, see memory/decisions.md.)
   const captured: CapturedPayload[] = [];
@@ -424,7 +428,7 @@ async function main(): Promise<void> {
   //     asserted in apps/api/tests/traces/test_otlp_span_type_fidelity.py,
   //     parametrized over the same enum. A new SpanType needs BOTH.
   const spanTypeCaptureStart = captured.length;
-  process.env.MORSE_LEGACY_TRANSPORT = "1";
+  process.env.AMUND_LEGACY_TRANSPORT = "1";
   try {
     await morse.runTraced({ agentName: "smoke-span-types" }, async (handle) => {
       for (const spanType of Object.values(SpanType)) {
@@ -437,7 +441,7 @@ async function main(): Promise<void> {
       return null;
     });
   } finally {
-    delete process.env.MORSE_LEGACY_TRANSPORT;
+    delete process.env.AMUND_LEGACY_TRANSPORT;
   }
   // Take these entries out of `captured` so the lenient track()/batchTrack()
   // replay at the bottom doesn't post them a second time — and, more to the
@@ -470,7 +474,7 @@ async function main(): Promise<void> {
   //     point and the shape the bug was reported against — the adapter opens
   //     its own trace when none is active.
   const anthropicCaptureStart = captured.length;
-  process.env.MORSE_LEGACY_TRANSPORT = "1";
+  process.env.AMUND_LEGACY_TRANSPORT = "1";
   try {
     const wrapped = wrapAnthropic({
       messages: {
@@ -489,7 +493,7 @@ async function main(): Promise<void> {
       messages: [{ role: "user", content: "hello" }],
     });
   } finally {
-    delete process.env.MORSE_LEGACY_TRANSPORT;
+    delete process.env.AMUND_LEGACY_TRANSPORT;
   }
   await assertAnthropicLlmSpanAccepted(captured.splice(anthropicCaptureStart), endpoint, apiKey);
 
@@ -666,7 +670,7 @@ async function main(): Promise<void> {
   // after the fact, so this must run before any process exit.
   if (otlpResults.length === 0) {
     console.error(
-      "[smoke] FAIL — no OTLP export results captured. run()/spanAsync() are not reaching the OTel engine (check MORSE_LEGACY_TRANSPORT is unset).",
+      "[smoke] FAIL — no OTLP export results captured. run()/spanAsync() are not reaching the OTel engine (check AMUND_LEGACY_TRANSPORT is unset).",
     );
     process.exit(1);
   }

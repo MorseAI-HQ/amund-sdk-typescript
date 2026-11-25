@@ -10,11 +10,11 @@
  *
  * Required env:
  *   OPENAI_API_KEY
- *   MORSE_API_KEY  (dev dogfood org)
+ *   AMUND_API_KEY  (dev dogfood org)
  *
  * Optional:
  *   OPENAI_MODEL  (default: gpt-4o-mini)
- *   MORSE_ENDPOINT
+ *   AMUND_ENDPOINT
  */
 
 import { getLastTrace } from "../src/_internal/tracing";

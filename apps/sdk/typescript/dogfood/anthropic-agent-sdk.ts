@@ -7,11 +7,11 @@
  *
  * Required env:
  *   ANTHROPIC_API_KEY
- *   MORSE_API_KEY  (dev dogfood org)
+ *   AMUND_API_KEY  (dev dogfood org)
  *
  * Optional:
  *   ANTHROPIC_MODEL  (default: claude-haiku-4-5)
- *   MORSE_ENDPOINT
+ *   AMUND_ENDPOINT
  */
 
 import { runAsync, getLastTrace } from "../src/_internal/tracing";

@@ -142,6 +142,22 @@ describe("SDKDIAG-02: payload scoping", () => {
     expect(stack[2]).toEqual({ elided: 1 });
   });
 
+  it("recognises frames from the @amund/sdk install path (the post-rebrand published name)", () => {
+    const err = new Error("boom");
+    err.stack = [
+      "Error: boom",
+      "    at redactValue (/app/node_modules/@amund/sdk/dist/chunk-ELBY4SJ7.js:249:35)",
+      "    at handler (/srv/app/routes/checkout.js:12:3)",
+      "    at pay (/home/amund/app/src/billing.js:9:1)",
+    ].join("\n");
+
+    const stack = diagnostics.buildScopedStack(err);
+
+    expect(stack[0]).toMatchObject({ function: "redactValue", line: 249 });
+    // Host frames, including one under an amund-named directory, stay elided.
+    expect(stack[1]).toEqual({ elided: 2 });
+  });
+
   it("still elides a host path that merely contains our name", () => {
     // Guards the fail-closed property against a broader `morsehq` substring
     // match: a customer whose code lives under a morsehq-named directory must

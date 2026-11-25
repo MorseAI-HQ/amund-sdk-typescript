@@ -20,6 +20,8 @@
  * integrations pass `undefined` for the explicit tier in that case.
  */
 
+import { readSdkEnvFrom } from "./env";
+
 export const DEFAULT_AGENT_NAME = "default-agent";
 
 // AID-01: also framework launcher scripts (Next.js `start-server`), which name no app.
@@ -68,9 +70,12 @@ export function isFrameworkNodeName(name: unknown): boolean {
   return FRAMEWORK_NODE_NAMES.has(bare) || /^\[(langchain|langgraph)\]$/i.test(n);
 }
 
-/** `MORSE_AGENT_IDENTITY=legacy` restores pre-0.7 (0.6.0) naming (AID-09). Read per call. */
+/**
+ * `AMUND_AGENT_IDENTITY=legacy` (or `MORSE_AGENT_IDENTITY=legacy`) restores
+ * pre-0.7 (0.6.0) naming (AID-09). Read per call.
+ */
 export function isLegacyIdentity(env: NodeJS.ProcessEnv = process.env): boolean {
-  return clean(env?.MORSE_AGENT_IDENTITY)?.toLowerCase() === "legacy";
+  return clean(readSdkEnvFrom(env, "AGENT_IDENTITY"))?.toLowerCase() === "legacy";
 }
 
 export type IdentitySource = "run" | "framework" | "service_name" | "entry_script" | "default";

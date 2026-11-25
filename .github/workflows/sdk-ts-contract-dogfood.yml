@@ -39,13 +39,14 @@ jobs:
     name: SDK TS wire-format smoke
     runs-on: ubuntu-latest
     env:
-      MORSE_API_KEY: ${{ secrets.CI_SDK_SMOKE_API_KEY }}
-      MORSE_ENDPOINT: ${{ secrets.CI_SDK_SMOKE_ENDPOINT }}
+      # AMUND_* since the Amund rebrand; the SDK and smoke.ts still accept MORSE_*.
+      AMUND_API_KEY: ${{ secrets.CI_SDK_SMOKE_API_KEY }}
+      AMUND_ENDPOINT: ${{ secrets.CI_SDK_SMOKE_ENDPOINT }}
     steps:
       - name: Check smoke credentials are configured
         id: creds
         run: |
-          if [ -z "${MORSE_API_KEY}" ]; then
+          if [ -z "${AMUND_API_KEY}" ]; then
             echo "configured=false" >> "$GITHUB_OUTPUT"
             echo "::notice title=SDK TS wire-format smoke skipped::CI_SDK_SMOKE_API_KEY is not set in this repository (or this PR is from a fork). Add the CI_SDK_SMOKE_API_KEY (and optionally CI_SDK_SMOKE_ENDPOINT) secret to enable the smoke."
             {
@@ -56,7 +57,7 @@ jobs:
             } >> "$GITHUB_STEP_SUMMARY"
           else
             echo "configured=true" >> "$GITHUB_OUTPUT"
-            if [ -z "${MORSE_ENDPOINT}" ]; then
+            if [ -z "${AMUND_ENDPOINT}" ]; then
               echo "::notice::CI_SDK_SMOKE_ENDPOINT is not set; smoke.ts will use its built-in dev endpoint."
             fi
           fi

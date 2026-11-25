@@ -62,8 +62,8 @@
  * normal OTel parent/child mechanism, the same way it would in any other
  * OTel-instrumented Node app.
  *
- * Default-on since 0.7.0 (INFRACAP-01); `MORSE_CAPTURE_DB=0` /
- * `MORSE_CAPTURE_INFRA=0` opt out, mirroring Python's
+ * Default-on since 0.7.0 (INFRACAP-01); `AMUND_CAPTURE_DB=0` /
+ * `AMUND_CAPTURE_INFRA=0` opt out, mirroring Python's
  * `infra_capture.py::maybe_enable_from_env`. Nothing is recorded outside an
  * active Morse trace, and a trace keeps at most 200 db spans (INFRACAP-03/04).
  * Inline SQL literals are scrubbed at export (INFRACAP-05).
@@ -150,8 +150,8 @@ export function _getRegisteredInstrumentationsForTesting(): Instrumentation[] | 
  * Enables DB capture unless switched off — mirrors Python's
  * `infra_capture.py::maybe_enable_from_env`:
  *
- * - `MORSE_CAPTURE_DB=0`    -> no DB capture
- * - `MORSE_CAPTURE_INFRA=0` -> no DB capture (a specific flag wins)
+ * - `AMUND_CAPTURE_DB=0`    -> no DB capture
+ * - `AMUND_CAPTURE_INFRA=0` -> no DB capture (a specific flag wins)
  */
 export function maybeEnableDbCaptureFromEnv(): void {
   if (isDbCaptureEnabled()) {

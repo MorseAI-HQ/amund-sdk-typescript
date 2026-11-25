@@ -71,7 +71,7 @@ describe("API key shape check", () => {
     morse.init({ apiKey: "mhq_prod_abc123", endpoint: "http://127.0.0.1:9/api/v1/traces/batch" }); // pragma: allowlist secret
     const lines = warnings(warnSpy).filter((l) => l.includes("looks malformed"));
     expect(lines).toEqual([
-      "morse: Morse API key looks malformed (it looks truncated or mistyped). Check MORSE_API_KEY.",
+      "morse: Amund API key looks malformed (it looks truncated or mistyped). Check AMUND_API_KEY (or MORSE_API_KEY).",
     ]);
     expect(lines[0]).not.toContain("abc123");
     morse._resetForTesting();
@@ -97,7 +97,7 @@ describe("OTLP path", () => {
     );
     exporter.export(SPANS, () => {});
     expect(warnings(warnSpy)).toContain(
-      "morse: Morse rejected the API key (401): 1 span(s) dropped. Check MORSE_API_KEY or get a new key in Settings → API keys.",
+      "morse: Amund rejected the API key (401): 1 span(s) dropped. Check AMUND_API_KEY (or MORSE_API_KEY) or get a new key in Settings → API keys.",
     );
   });
 
@@ -111,7 +111,7 @@ describe("OTLP path", () => {
     );
     exporter.export(SPANS, () => {});
     expect(warnings(warnSpy)).toContain(
-      "morse: Morse unreachable (api.morseai.dev): 1 span(s) dropped after retries. Spans are not buffered across outages.",
+      "morse: Amund unreachable (api.morseai.dev): 1 span(s) dropped after retries. Spans are not buffered across outages.",
     );
     expect(diagnostics.drainCounters()).toEqual([
       { reason: "retry_exhausted", category: "span", quantity: 1 },
@@ -130,7 +130,7 @@ describe("OTLP path", () => {
       slow.export(SPANS, () => {});
       await vi.advanceTimersByTimeAsync(3_100);
       const retrying = warnings(warnSpy).filter((l) => l.includes("retrying"));
-      expect(retrying).toEqual(["morse: Morse not responding (api.morseai.dev), retrying…"]);
+      expect(retrying).toEqual(["morse: Amund not responding (api.morseai.dev), retrying…"]);
 
       warnSpy.mockClear();
       diagnostics.noteDelivered();
@@ -208,7 +208,7 @@ describe("JSON transport", () => {
     await transport.shutdown();
     const lines = warnings(warnSpy);
     expect(lines).toContain(
-      "morse: Morse rejected the API key (401): 1 trace(s) dropped. Check MORSE_API_KEY or get a new key in Settings → API keys.",
+      "morse: Amund rejected the API key (401): 1 trace(s) dropped. Check AMUND_API_KEY (or MORSE_API_KEY) or get a new key in Settings → API keys.",
     );
     expect(lines.some((l) => l.includes("morse internal error"))).toBe(false);
   });
@@ -229,10 +229,10 @@ describe("JSON transport", () => {
     await transport.shutdown();
     const lines = warnings(warnSpy);
     expect(lines.filter((l) => l.includes("retrying"))).toEqual([
-      "morse: Morse unreachable (api.morseai.dev), retrying…",
+      "morse: Amund unreachable (api.morseai.dev), retrying…",
     ]);
     expect(lines).toContain(
-      "morse: Morse unreachable (api.morseai.dev): 1 trace(s) dropped after retries. Traces are not buffered across outages.",
+      "morse: Amund unreachable (api.morseai.dev): 1 trace(s) dropped after retries. Traces are not buffered across outages.",
     );
     expect(lines.some((l) => l.includes("morse internal error"))).toBe(false);
   }, 20_000);

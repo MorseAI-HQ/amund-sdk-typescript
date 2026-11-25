@@ -1,6 +1,6 @@
 import Anthropic from "@anthropic-ai/sdk";
-import { runTraced } from "@morsehq-dev/sdk";
-import { wrapAnthropic } from "@morsehq-dev/sdk/anthropic";
+import { runTraced } from "@amund/sdk";
+import { wrapAnthropic } from "@amund/sdk/anthropic";
 import { requireEnv, runDogfood } from "./_common.js";
 
 async function main() {

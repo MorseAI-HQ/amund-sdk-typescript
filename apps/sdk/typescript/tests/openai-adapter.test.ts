@@ -1,5 +1,5 @@
 /**
- * Plain OpenAI adapter (`@morsehq/sdk/openai`) tests (MHQ-747).
+ * Plain OpenAI adapter (`@amund/sdk/openai`) tests (MHQ-747).
  *
  * Mirrors `apps/sdk/python/tests/test_openai_context_segments.py`'s
  * `wrap()` integration coverage granularity: llm span emission, token/cost

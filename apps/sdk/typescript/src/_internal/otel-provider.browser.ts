@@ -23,7 +23,7 @@
  * ---------------------------
  * Tracing still WORKS in the browser: `isOtelAvailable()` returns false, so
  * `tracing.ts::sendTrace` routes traces down the legacy JSON transport
- * (the same path `MORSE_LEGACY_TRANSPORT=1` selects in Node) instead of
+ * (the same path `AMUND_LEGACY_TRANSPORT=1` selects in Node) instead of
  * dropping them. What is genuinely unavailable in a browser is the OTLP
  * span pipeline and DB-driver instrumentation; `noteBrowserRuntime()` says
  * so once, out loud, rather than leaving an integrator to wonder why their
@@ -62,7 +62,7 @@ function noteBrowserRuntime(): void {
   try {
     console.info(
       "[morse] Browser build active: OpenTelemetry span export and database " +
-        "capture are Node-only, so traces are sent via Morse's JSON transport " +
+        "capture are Node-only, so traces are sent via Amund's JSON transport " +
         "instead. Everything else — run()/span()/track() and W3C traceparent " +
         "propagation — behaves identically. Server-side code (Next.js route " +
         "handlers, RSC, Node services) automatically gets the full OTel pipeline.",

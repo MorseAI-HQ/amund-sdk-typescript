@@ -25,7 +25,7 @@
  *   (`node:crypto`, `node:http`/`https`) that don't exist in a browser
  *   bundle. A future browser-targeted build would need either a
  *   browser-flavored OTel exporter swapped in at this call site or to
- *   keep `MORSE_LEGACY_TRANSPORT=1`'s JSON path as the browser default —
+ *   keep `AMUND_LEGACY_TRANSPORT=1`'s JSON path as the browser default —
  *   out of scope for this port (see the PR report's deviation notes).
  *
  * - MHQ-482 (db-capture follow-up): `runSync`/`runAsync`/`spanSync`/
@@ -77,7 +77,7 @@ import { extractTraceparent } from "../propagation";
 export interface TraceState {
   traceId: string;
   agentName: string;
-  // AID-01: which ladder rung produced `agentName`. Absent under MORSE_AGENT_IDENTITY=legacy.
+  // AID-01: which ladder rung produced `agentName`. Absent under AMUND_AGENT_IDENTITY=legacy.
   identitySource?: IdentitySource;
   // AID-04: root agent an adapter discovered (graph / starting-agent name). First wins.
   frameworkRoot?: string;
@@ -504,7 +504,7 @@ function buildTraceDict(
  * Always updates `lastTrace` (test/debug introspection — same bookkeeping
  * regardless of which pipeline actually ships the trace), then hands the
  * dict to `otel-provider.ts::emitTraceEntry()` — unless
- * `MORSE_LEGACY_TRANSPORT=1`, in which case it falls back to the old JSON
+ * `AMUND_LEGACY_TRANSPORT=1`, in which case it falls back to the old JSON
  * queue path instead (rollback escape hatch; never both, to avoid
  * double-ingesting the same trace).
  *

@@ -1,15 +1,15 @@
 /**
- * `@morsehq-dev/sdk` — TypeScript SDK for Morse observability.
+ * `@amund/sdk` — TypeScript SDK for Amund (formerly Morse) observability.
  *
  * V2 module-level singleton API:
  *
  * ```ts
- * import * as morse from "@morsehq-dev/sdk";
+ * import * as morse from "@amund/sdk";
  *
  * // Three-step zero-setup integration:
- * //   1. Generate an API key in the Morse dashboard.
- * //   2. npm install @morsehq-dev/sdk
- * //   3. Set MORSE_API_KEY in your environment.
+ * //   1. Generate an API key in the Amund dashboard.
+ * //   2. npm install @amund/sdk
+ * //   3. Set AMUND_API_KEY in your environment.
  *
  * morse.track({ agentId: "lead-qualifier", runData: { success: true } });
  *
@@ -169,7 +169,7 @@ export const version = SDK_VERSION;
 
 /** Options accepted by `init()`. Mirrors Python's `init(...)` kwargs. */
 export interface InitOptions {
-  /** API key (starts with "mhq_"). Required if no `MORSE_API_KEY` env var. */
+  /** API key (starts with "mhq_"). Required if no `AMUND_API_KEY` (or `MORSE_API_KEY`) env var. */
   apiKey?: string;
   /** Full ingestion URL. Defaults to the production Railway endpoint. */
   endpoint?: string;
@@ -188,7 +188,7 @@ export interface InitOptions {
    * dogfood emitters. Mirrors the Python SDK's `init(source=...)` kwarg
    * (PR #90). Accepted values: `"copilot" | "investigator" | "refagent"
    * | "ui-bot"`. Any other value (including misspellings) is silently
-   * dropped — falls back to the `MORSE_INTERNAL_SOURCE` env var.
+   * dropped — falls back to the `AMUND_INTERNAL_SOURCE` env var.
    * Customers should not set this.
    */
   source?: string;
@@ -213,7 +213,7 @@ export interface InitOptions {
    * extra request header, `traceparent`, naming the call's `llm` span so a gateway
    * (LiteLLM) that forwards it lands in the same trace and its record of the call is
    * merged with the SDK's instead of counted twice. Nothing else is sent. Set `false`
-   * to send nothing (also: `MORSE_PROPAGATE_TRACE_CONTEXT=false`). A `traceparent`
+   * to send nothing (also: `AMUND_PROPAGATE_TRACE_CONTEXT=false`). A `traceparent`
    * you set on a call is never replaced. Mirrors Python's `init(propagate_trace_context=...)`.
    */
   propagateTraceContext?: boolean;
@@ -274,7 +274,7 @@ function logDestinationOnce(endpoint: string): void {
   lastLoggedEndpoint = endpoint;
   logger(
     "info",
-    `morse: Morse SDK initialized — sending to ${endpoint} (sdk version ${SDK_VERSION})`,
+    `morse: Amund SDK initialized — sending to ${endpoint} (sdk version ${SDK_VERSION})`,
   );
 }
 
@@ -285,7 +285,10 @@ function warnIfKeyMalformed(apiKey: string): void {
   const problem = apiKeyShapeProblem(apiKey);
   if (problem === null) return;
   malformedKeyWarned = true;
-  logger("warn", `morse: Morse API key looks malformed (${problem}). Check MORSE_API_KEY.`);
+  logger(
+    "warn",
+    `morse: Amund API key looks malformed (${problem}). Check AMUND_API_KEY (or MORSE_API_KEY).`,
+  );
 }
 
 function resolveEndpoint(explicit?: string): string {
@@ -324,7 +327,7 @@ function buildSingleton(opts: InitOptions, redaction: RedactionConfig): Singleto
     if (!noApiKeyWarningEmitted) {
       logger(
         "warn",
-        "morse: not initialized — set MORSE_API_KEY or call morse.init({ apiKey }) (this warning prints once per process; SDK calls are silent no-ops)",
+        "morse: not initialized — set AMUND_API_KEY (or MORSE_API_KEY) or call morse.init({ apiKey }) (this warning prints once per process; SDK calls are silent no-ops)",
       );
       noApiKeyWarningEmitted = true;
     }
@@ -356,7 +359,7 @@ function buildSingleton(opts: InitOptions, redaction: RedactionConfig): Singleto
 
   // MHQ-482: run()/span()/runTraced()'s real emission pipeline — real OTel
   // spans over OTLP protobuf+gzip. Configured unconditionally (even under
-  // MORSE_LEGACY_TRANSPORT=1) so the engine is ready if the flag flips at
+  // AMUND_LEGACY_TRANSPORT=1) so the engine is ready if the flag flips at
   // runtime; the flag only affects which pipeline `tracing.ts::sendTrace()`
   // feeds. Mirrors the Python SDK's `_Client.__init__`.
   try {
@@ -394,8 +397,8 @@ function buildSingleton(opts: InitOptions, redaction: RedactionConfig): Singleto
   });
 
   // INFRACAP-01: db / http / queue auto-capture, ON by default and only ever
-  // recording inside an active trace (opt out with MORSE_CAPTURE_INFRA=0, or
-  // MORSE_CAPTURE_DB / _HTTP / _QUEUE=0). Mirrors the Python SDK's
+  // recording inside an active trace (opt out with AMUND_CAPTURE_INFRA=0, or
+  // AMUND_CAPTURE_DB / _HTTP / _QUEUE=0). Mirrors the Python SDK's
   // `infra_capture.py::maybe_enable_from_env`. MUST run after
   // `getOtelEngine().configure()` above — instrumentation registration needs
   // the `NodeTracerProvider` that call just built. Never throws.
@@ -415,7 +418,7 @@ function ensureInitialized(): SingletonState | null {
 /**
  * `ensureInitialized()` for run entry points. MHQ-1787: a run opened with no API
  * key keeps its trace id but is never sent, so count it for the exit warning.
- * `MORSE_DISABLED` is a deliberate opt-out and is not counted.
+ * `AMUND_DISABLED` is a deliberate opt-out and is not counted.
  */
 function ensureInitializedForRun(): void {
   if (ensureInitialized() === null && !readIsDisabled() && !readApiKeyFromEnv()) {
@@ -436,15 +439,15 @@ _setLogEnsureInitialized(() => {
 /* ------------------------------------------------------------------------ */
 
 /**
- * Initialize the Morse SDK singleton. Call once at application
+ * Initialize the Amund SDK singleton. Call once at application
  * startup. After this call, `track()`, `batchTrack()`, `run()`, and
  * `flush()` are wired up to the configured endpoint.
  *
  * `endpoint` is optional — when omitted, the SDK resolves in this order:
- *   1. `MORSE_ENDPOINT` env var (if set)
+ *   1. `AMUND_ENDPOINT` env var (if set)
  *   2. The default Railway production URL.
  *
- * `MORSE_DISABLED=1` overrides everything: `init()` is a no-op.
+ * `AMUND_DISABLED=1` overrides everything: `init()` is a no-op.
  *
  * Calling `init()` a second time replaces the singleton — the previous
  * transport is shut down cleanly and a new one is constructed.
@@ -457,7 +460,7 @@ _setLogEnsureInitialized(() => {
  */
 export function init(options: InitOptions = {}): void {
   if (readIsDisabled()) {
-    logger("info", "morse: MORSE_DISABLED=1 — SDK is a no-op");
+    logger("info", "morse: AMUND_DISABLED (or MORSE_DISABLED) is on — SDK is a no-op");
     return;
   }
   // Validate redaction options FIRST — must throw before we mutate any
@@ -657,7 +660,7 @@ export function setPrompt(name: string, version?: number | string): void {
 
 /** Start a child span under the active trace. Returns null if no trace. */
 /**
- * Fetch a hosted prompt from the Morse prompt registry.
+ * Fetch a hosted prompt from the Amund prompt registry.
  *
  * Selects by `label` (default `"production"`) or `version`; both throws a
  * `TypeError` before any request. Pass a previous result's `etag` as
@@ -668,7 +671,7 @@ export function setPrompt(name: string, version?: number | string): void {
  * lacks `prompts:read`), `PromptNotFoundError` (404), `PromptRateLimitError`
  * (429, `.retryAfter`), and fetch's own error on network failure.
  *
- * Caching: we recommend caching in some form so Morse is not on your request
+ * Caching: we recommend caching in some form so Amund is not on your request
  * hot path. Three options: (1) call the API directly every time (the default;
  * the API sends `Cache-Control: private, max-age=30`); (2) use your own cache;
  * (3) pass `cacheTtlSeconds` for a small process-local LRU. A fresh entry is
@@ -680,7 +683,7 @@ export function setPrompt(name: string, version?: number | string): void {
  *
  * Linking (UP-09): by default, if a run is active when you call this, the run is
  * linked to the returned `name@version` (a prompt reference tagged
- * `link_source: "fetch"`), so Morse can show which runs used which managed
+ * `link_source: "fetch"`), so Amund can show which runs used which managed
  * version. This covers a fresh 200, an SDK cache hit, and a 304 when the SDK holds
  * the cached prompt for that selector (otherwise nothing is linked). No active run
  * means no link; pass `{ link: false }` to opt out. Linking never throws. If you
@@ -697,7 +700,7 @@ export async function getPrompt(
   const state = ensureInitialized();
   if (state === null) {
     throw new PromptError(
-      "morse: not initialized — set MORSE_API_KEY or call morse.init({ apiKey }) before getPrompt()",
+      "morse: not initialized — set AMUND_API_KEY (or MORSE_API_KEY) or call morse.init({ apiKey }) before getPrompt()",
     );
   }
   const result = await fetchPromptCached(state.endpoint, state.apiKey, name, options);

@@ -10,7 +10,7 @@
  *   job's `telemetry.metadata` for BullMQ, into `MessageAttributes` for SQS.
  *   Payloads (job data, message bodies) are never read.
  *
- * Consumer side (opt-in, `MORSE_CAPTURE_QUEUE_CONSUMER=1`)
+ * Consumer side (opt-in, `AMUND_CAPTURE_QUEUE_CONSUMER=1`)
  *   Neither BullMQ nor aws-sdk exposes a stable worker hook to patch, so the
  *   consumer side is a pair of helpers, `continueFromBullMqJob` and
  *   `continueFromSqsMessage`. Without the flag they just call `fn`. With it they
@@ -50,7 +50,7 @@ type AnyRecord = Record<string, any>;
 function publishSpan(system: string, destination: string | undefined): DetachedSpan | null {
   // Untraced publishes stop before reading any env var (process.env is slow).
   if (getActiveTraceState() === null) return null;
-  if (!isCaptureEnabled("MORSE_CAPTURE_QUEUE")) return null;
+  if (!isCaptureEnabled("CAPTURE_QUEUE")) return null;
   if (!admitInfraCall("queue")) return null;
   return startDetachedSpan({
     name: destination ? `publish ${destination}` : "publish",
@@ -154,7 +154,7 @@ function safe<T>(fn: () => T): T | null {
 
 /**
  * Process one BullMQ job inside the producer's trace. Pass-through unless
- * `MORSE_CAPTURE_QUEUE_CONSUMER=1`.
+ * `AMUND_CAPTURE_QUEUE_CONSUMER=1`.
  *
  *     new Worker("jobs", (job) => continueFromBullMqJob(job, "jobs-worker", () => handle(job)))
  */
@@ -237,7 +237,7 @@ export function patchSqsClient(ClientCtor: AnyRecord): () => void {
 
 /**
  * Process one received SQS message inside the producer's trace. Pass-through
- * unless `MORSE_CAPTURE_QUEUE_CONSUMER=1`.
+ * unless `AMUND_CAPTURE_QUEUE_CONSUMER=1`.
  */
 export async function continueFromSqsMessage<T>(
   message: AnyRecord,

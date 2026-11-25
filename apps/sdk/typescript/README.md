@@ -1,6 +1,19 @@
-# Morse TypeScript SDK
+# Amund TypeScript SDK
 
 Unified observability for AI agents and infrastructure — Node backend, one SDK.
+
+> **Morse is now Amund.** This package was published as `@morsehq-dev/sdk` up
+> to 0.8.0. From the next release it is `@amund/sdk`, and `@morsehq-dev/sdk` keeps
+> working, published at the same version as a thin compatibility package that re-exports `@amund/sdk` (same module
+> instances, every subpath) and prints a one-time deprecation notice. To
+> migrate, swap the dependency and replace `@morsehq-dev/sdk` with `@amund/sdk`
+> in your imports. Nothing else changes: the API, the `mhq_` key format and the
+> default endpoint are the same.
+>
+> **Environment variables** are now `AMUND_*` (`AMUND_API_KEY`,
+> `AMUND_ENDPOINT`, …). Every `MORSE_*` name is still read as a fallback, so
+> existing deployments need no change; when both are set, `AMUND_*` wins (an
+> empty `AMUND_*` counts as unset).
 
 **Requires Node.js 18.19+ or 20.6+.**
 
@@ -14,7 +27,7 @@ Unified observability for AI agents and infrastructure — Node backend, one SDK
 >
 > In that browser build, `run()` / `span()` / `track()` / `record()` and W3C
 > `traceparent` propagation behave exactly as documented, with traces sent
-> over Morse's JSON transport. Three things are Node-only and quietly
+> over Amund's JSON transport. Three things are Node-only and quietly
 > inactive in a browser, because they have no browser equivalent:
 > OpenTelemetry OTLP span export, database capture (pg / mysql2
 > instrumentation), and zero-config adapter auto-detect — which hooks
@@ -28,7 +41,7 @@ Unified observability for AI agents and infrastructure — Node backend, one SDK
 ## Install
 
 ```bash
-npm install @morsehq-dev/sdk
+npm install @amund/sdk
 ```
 
 Adapters are peer dependencies — install only the SDKs you actually
@@ -39,9 +52,9 @@ Nothing else is pulled in for adapters you don't use.
 ## Quick Start
 
 ```ts
-import * as morse from "@morsehq-dev/sdk";
+import * as morse from "@amund/sdk";
 
-morse.init({ apiKey: process.env.MORSE_API_KEY });
+morse.init({ apiKey: process.env.AMUND_API_KEY });
 
 morse.record({
   agent: "lead-qualifier",
@@ -67,11 +80,11 @@ by default — see [Transport](#transport) below.
 
 ## Linking runs to business records and versions
 
-Four small calls let Morse tie a run to the record it worked on and to the
+Four small calls let Amund tie a run to the record it worked on and to the
 code that produced it. All are optional, additive, and never throw.
 
 ```ts
-morse.init({ apiKey: process.env.MORSE_API_KEY, agentVersion: "2026.10.1" });
+morse.init({ apiKey: process.env.AMUND_API_KEY, agentVersion: "2026.10.1" });
 
 await morse.runTraced(
   {
@@ -110,7 +123,7 @@ await morse.runTraced(
 - All four are no-ops outside a trace.
 
 **Git revision and service version** are picked up automatically, with no code.
-The revision is the first of `MORSE_GIT_REVISION`, `GITHUB_SHA`, `CI_COMMIT_SHA`,
+The revision is the first of `AMUND_GIT_REVISION`, `GITHUB_SHA`, `CI_COMMIT_SHA`,
 `RAILWAY_GIT_COMMIT_SHA`, `VERCEL_GIT_COMMIT_SHA`, `RENDER_GIT_COMMIT` or
 `SOURCE_VERSION` that is set, otherwise `git rev-parse HEAD` — and that last step
 runs only on Node, only when a `git` binary and checkout are present, and gives up
@@ -119,7 +132,7 @@ there is usually no `.git` directory, so pass the revision in at build time**:
 
 ```dockerfile
 ARG GIT_SHA
-ENV MORSE_GIT_REVISION=$GIT_SHA
+ENV AMUND_GIT_REVISION=$GIT_SHA
 ```
 
 `service.version` is read from `OTEL_RESOURCE_ATTRIBUTES` (for example
@@ -128,12 +141,12 @@ Both are detected once at `init()` and cached.
 
 ## Zero-config instrumentation
 
-Once `morse.init()` runs (or `MORSE_API_KEY` is set in the environment),
+Once `morse.init()` runs (or `AMUND_API_KEY` is set in the environment),
 the SDK scans for already-loaded — and lazily requires — supported
 libraries and wraps them automatically. Today that covers
 `@anthropic-ai/sdk` and the Vercel AI SDK (`ai`); every call already
 loaded or `require()`d after init gets traced with no further code
-changes. Opt out with `MORSE_DISABLE_AUTO_DETECT=1`.
+changes. Opt out with `AMUND_DISABLE_AUTO_DETECT=1`.
 
 The other adapters below (`anthropic-agent-sdk`, `openai-agents`,
 `langgraph`, `langchain`) don't have a zero-config path yet — call
@@ -180,11 +193,11 @@ require peer `zod ^4`, and this monorepo is on zod 3 (MHQ-935).
 `openai` and `@anthropic-ai/sdk` have no nightly `latest` lane yet — their
 floors are verified per PR, but nothing watches upstream for them (MHQ-930).
 
-### `@morsehq-dev/sdk/anthropic` — Anthropic Messages API
+### `@amund/sdk/anthropic` — Anthropic Messages API
 
 ```ts
 import Anthropic from "@anthropic-ai/sdk";
-import { wrapAnthropic } from "@morsehq-dev/sdk/anthropic";
+import { wrapAnthropic } from "@amund/sdk/anthropic";
 
 const client = wrapAnthropic(new Anthropic());
 // every messages.create call now emits an `llm` span automatically
@@ -195,11 +208,11 @@ no-op on a client if a global auto-detect install is already active
 (no double-recording). Pass `{ summarize: true }` to also emit a
 sibling `memory` span per call.
 
-### `@morsehq-dev/sdk/openai` — OpenAI (Chat Completions and Responses)
+### `@amund/sdk/openai` — OpenAI (Chat Completions and Responses)
 
 ```ts
 import OpenAI from "openai";
-import { wrapOpenAI } from "@morsehq-dev/sdk/openai";
+import { wrapOpenAI } from "@amund/sdk/openai";
 
 const client = wrapOpenAI(new OpenAI());
 // chat.completions.create and responses.create each emit an `llm` span
@@ -217,23 +230,23 @@ A stream returned from `morse.run()` and read afterwards (a streamed HTTP route)
 keeps its trace open until the stream ends, for this adapter, `wrapAnthropic` and
 the Vercel AI adapter.
 
-### `@morsehq-dev/sdk/anthropic-agent-sdk` — Claude Agent SDK
+### `@amund/sdk/anthropic-agent-sdk` — Claude Agent SDK
 
 Wrap the package's top-level `query` and call the returned function in its
 place. The trace's root span is the agent (it carries the served model; pass
 `defaultAgentName` to name it, and a surrounding `run("app")` becomes the app
 label); under it come per-call **llm** spans (with `context_segments`), **tool**
 spans, **subagent.spawn** spans for Task-tool fan-out, and **hook** spans.
-`MORSE_AGENT_IDENTITY=legacy` restores the extra `anthropic-agent-sdk.agent` span.
+`AMUND_AGENT_IDENTITY=legacy` restores the extra `anthropic-agent-sdk.agent` span.
 
 ```ts
 import { query } from "@anthropic-ai/claude-agent-sdk";
-import { wrapClaudeAgentQuery } from "@morsehq-dev/sdk/anthropic-agent-sdk";
+import { wrapClaudeAgentQuery } from "@amund/sdk/anthropic-agent-sdk";
 
 const tracedQuery = wrapClaudeAgentQuery(query);
 
 for await (const message of tracedQuery({ prompt: "research the 2026 RLHF landscape" })) {
-  // your code unchanged — spans flow to Morse as a side-effect
+  // your code unchanged — spans flow to Amund as a side-effect
 }
 ```
 
@@ -246,7 +259,7 @@ export is read-only and non-configurable, so there is nothing to patch in
 place — the same constraint the Vercel AI adapter hit. Auto-detect notices
 the package and logs a one-time hint pointing here.
 
-### `@morsehq-dev/sdk/openai-agents` — OpenAI Agents SDK
+### `@amund/sdk/openai-agents` — OpenAI Agents SDK
 
 Wraps `Runner` from `@openai/agents`. Emits an outer **agent** span,
 **llm** + **tool** spans, **subagent.spawn**-shaped spans for
@@ -254,7 +267,7 @@ Wraps `Runner` from `@openai/agents`. Emits an outer **agent** span,
 
 ```ts
 import { Runner, Agent } from "@openai/agents";
-import { wrapRunnerWithFullInstrumentation } from "@morsehq-dev/sdk/openai-agents";
+import { wrapRunnerWithFullInstrumentation } from "@amund/sdk/openai-agents";
 
 const raw = new Runner();
 const { runner, dispose } = wrapRunnerWithFullInstrumentation(raw);
@@ -263,7 +276,7 @@ await runner.run(agent, userInput);
 dispose();
 ```
 
-### `@morsehq-dev/sdk/langgraph` — LangGraph JS
+### `@amund/sdk/langgraph` — LangGraph JS
 
 `MorseCallbackHandler`, a `BaseCallbackHandler` you pass via
 `callbacks`. Emits **agent** spans per chain (nested chains nest
@@ -271,13 +284,13 @@ properly), **llm** + **tool** spans, and aggregates streaming tokens
 onto the parent llm span rather than emitting per-token spans.
 
 ```ts
-import { MorseCallbackHandler } from "@morsehq-dev/sdk/langgraph";
+import { MorseCallbackHandler } from "@amund/sdk/langgraph";
 
 const handler = new MorseCallbackHandler();
 const result = await graph.invoke(input, { callbacks: [handler] });
 ```
 
-### `@morsehq-dev/sdk/langchain` — plain LangChain (chains, LLMs, tools, retrievers)
+### `@amund/sdk/langchain` — plain LangChain (chains, LLMs, tools, retrievers)
 
 `MorseCallbackHandler` for `@langchain/core` outside a LangGraph graph
 — a structural sibling of the `langgraph` adapter, not a subclass.
@@ -285,8 +298,8 @@ Doesn't auto-create a trace when none is active; wrap the invocation in
 `morse.run()`.
 
 ```ts
-import { MorseCallbackHandler } from "@morsehq-dev/sdk/langchain";
-import * as morse from "@morsehq-dev/sdk";
+import { MorseCallbackHandler } from "@amund/sdk/langchain";
+import * as morse from "@amund/sdk";
 
 const handler = new MorseCallbackHandler({ agentName: "my-agent" });
 await morse.run({ agentName: "my-agent" }, async () => {
@@ -294,7 +307,7 @@ await morse.run({ agentName: "my-agent" }, async () => {
 });
 ```
 
-### `@morsehq-dev/sdk/vercel-ai` — Vercel AI SDK
+### `@amund/sdk/vercel-ai` — Vercel AI SDK
 
 One `llm` span per top-level `streamText` / `generateText` /
 `generateObject` invocation (in a trace of its own when no `run()` is open),
@@ -307,7 +320,7 @@ ships pure ESM), so there is nothing a monkey-patch can reassign, unlike
 replacement functions once and call those instead of `ai`'s own:
 
 ```ts
-import { createTracedVercelAI } from "@morsehq-dev/sdk/vercel-ai";
+import { createTracedVercelAI } from "@amund/sdk/vercel-ai";
 
 const { streamText, generateText, generateObject } = await createTracedVercelAI();
 // use streamText(...) / generateText(...) / generateObject(...) exactly
@@ -317,17 +330,17 @@ const { streamText, generateText, generateObject } = await createTracedVercelAI(
 #### Use the AI SDK's own telemetry
 
 Prefer to keep importing `generateText` / `streamText` from `ai`? Send the AI
-SDK's own OpenTelemetry spans to Morse instead. `ai@7` emits them through an
+SDK's own OpenTelemetry spans to Amund instead. `ai@7` emits them through an
 integration from [`@ai-sdk/otel`](https://www.npmjs.com/package/@ai-sdk/otel)
 (an optional peer dependency — install it yourself), so pass that class in:
 
 ```ts
 import { generateText } from "ai";
 import { LegacyOpenTelemetry } from "@ai-sdk/otel";
-import * as morse from "@morsehq-dev/sdk";
-import { morseTelemetry } from "@morsehq-dev/sdk/vercel-ai";
+import * as morse from "@amund/sdk";
+import { morseTelemetry } from "@amund/sdk/vercel-ai";
 
-morse.init({ apiKey: process.env.MORSE_API_KEY });
+morse.init({ apiKey: process.env.AMUND_API_KEY });
 
 await generateText({
   model,
@@ -343,7 +356,7 @@ await generateText({
 
 - Spans (`ai.generateText`, `ai.generateText.doGenerate`, `ai.toolCall`, ...) go
   through the same sampling, redaction and OTLP exporter as the rest of the SDK.
-  Morse's tracer is private: your own OpenTelemetry setup is not touched and does
+  Amund's tracer is private: your own OpenTelemetry setup is not touched and does
   not see these spans.
 - Needs `morse.init()` first. Otherwise (and in the browser build) it returns
   `{ isEnabled: false }` and prints one warning. It never throws.
@@ -352,13 +365,13 @@ await generateText({
 - Need a bare tracer (for `new OpenTelemetry({ tracer, ...options })` or a
   pre-v7 `ai`)? `morseTracer()` returns one.
 
-### `@morsehq-dev/sdk/integrations/pino` — pino log forwarding
+### `@amund/sdk/integrations/pino` — pino log forwarding
 
-Ship pino log lines to Morse, auto-correlated with the active trace.
+Ship pino log lines to Amund, auto-correlated with the active trace.
 
 ```ts
 import pino from "pino";
-import { morsePinoDestination } from "@morsehq-dev/sdk/integrations/pino";
+import { morsePinoDestination } from "@amund/sdk/integrations/pino";
 
 const logger = pino(
   { level: "info" },
@@ -380,7 +393,7 @@ backend `SpanType` enum gains native variants.
 ## Fetching hosted prompts
 
 ```ts
-import * as morse from "@morsehq-dev/sdk";
+import * as morse from "@amund/sdk";
 
 const prompt = await morse.getPrompt("triage"); // label "production"
 await morse.getPrompt("triage", { version: 3 }); // or pin a version
@@ -397,13 +410,13 @@ network failures surface as `fetch`'s own error. Passing both `label` and `versi
 `TypeError`.
 
 **Linking.** If a run is active when you call `getPrompt`, the run is linked to the returned
-`name@version` (a prompt reference tagged `link_source: "fetch"`), so Morse can show which runs used
+`name@version` (a prompt reference tagged `link_source: "fetch"`), so Amund can show which runs used
 which managed version. This applies to a fresh fetch, an SDK cache hit, and a 304 when the SDK holds
 the cached prompt for that selector. No active run means no link. Pass `{ link: false }` to opt out.
 The first link in a process logs one info line. If you also call `setPrompt` with the same name and
 version in the same span, one reference is kept and it is tagged "fetch".
 
-We recommend caching in some form so Morse is not on your request hot path. You have three options:
+We recommend caching in some form so Amund is not on your request hot path. You have three options:
 
 1. **Call the API directly** on every use (the default). Responses carry `Cache-Control: max-age=30`.
 2. **Use your own cache**, with a bundled fallback prompt if you want one.
@@ -430,16 +443,16 @@ Inside an open `morse.run()` trace, the SDK records `db` spans for Postgres (`pg
 OpenTelemetry context propagation. Nothing is recorded when no trace is open. SQL is stored without
 bound values and with inline literals replaced by `?`; HTTP spans are `METHOD host` only.
 
-Opt out with `MORSE_CAPTURE_INFRA=0`, or per kind with `MORSE_CAPTURE_DB=0`,
-`MORSE_CAPTURE_HTTP=0`, `MORSE_CAPTURE_QUEUE=0`. A trace keeps at most 200 db, 100 http and 100
+Opt out with `AMUND_CAPTURE_INFRA=0`, or per kind with `AMUND_CAPTURE_DB=0`,
+`AMUND_CAPTURE_HTTP=0`, `AMUND_CAPTURE_QUEUE=0`. A trace keeps at most 200 db, 100 http and 100
 queue spans; the rest become one summary span. Full details, including what is never recorded:
-https://docs.morseai.dev/sdk/infra-capture
+https://docs.amundai.com/sdk/infra-capture
 
 ## Transport
 
 `run()`/`span()`/`record()` emit real `@opentelemetry/sdk-trace-node`
 spans over OTLP (protobuf+gzip) — the same transport architecture as
-the Python SDK. `MORSE_LEGACY_TRANSPORT=1` reverts to a plain
+the Python SDK. `AMUND_LEGACY_TRANSPORT=1` reverts to a plain
 JSON-over-fetch batcher as an escape hatch during a migration window;
 you shouldn't need it. `track()`/`batchTrack()` are a lower-level,
 non-trace-shaped escape hatch of their own — prefer `record()`.
@@ -453,14 +466,14 @@ to send elsewhere.
 Client-side redaction, **default-on**. Sensitive strings (API keys,
 JWTs, credit-card numbers, SSNs, emails, phone numbers) are rewritten
 to `[REDACTED:<kind>]` markers inside your process before any data
-leaves for the Morse ingest endpoint. The same pattern catalogue ships
+leaves for the Amund ingest endpoint. The same pattern catalogue ships
 in the Python SDK and the server-side ingest layer.
 
 ```ts
-import { init } from "@morsehq-dev/sdk";
+import { init } from "@amund/sdk";
 
 init({
-  apiKey: process.env.MORSE_API_KEY,
+  apiKey: process.env.AMUND_API_KEY,
   redaction: {
     enabled: true, // default
     disabledPatterns: ["email"], // turn off email-only
@@ -494,27 +507,28 @@ init({
 ## Docs
 
 Full reference — every adapter, all `init()` options, configuration,
-troubleshooting — lives at **[docs.morseai.dev](https://docs.morseai.dev)**.
+troubleshooting — lives at **[docs.amundai.com](https://docs.amundai.com)**.
 This README stays a quickstart.
 
 ## Installing what a release ships (QA / dogfood)
 
-`npm pack` straight from the repo produces `@morsehq/sdk`, a name that is not on
-npm. To test the artifact exactly as a release publishes it:
+A release publishes two tarballs, both built by `pnpm pack`: `@amund/sdk` and the
+`@morsehq-dev/sdk` compatibility shim (`compat/morsehq-dev-sdk/`). To test them
+exactly as a release publishes them:
 
 ```bash
-pnpm --filter @morsehq/sdk pack:published          # builds, packs, prints the tarball path
-pnpm --filter @morsehq/sdk pack:published --no-build --out /tmp/sdk-pack
-npm install /path/to/morsehq-dev-sdk-X.Y.Z.tgz     # in a project outside the monorepo
+pnpm --filter @amund/sdk pack:published          # builds both, packs, prints both tarball paths
+pnpm --filter @amund/sdk pack:published --no-build --out /tmp/sdk-pack
+pnpm --filter @amund/sdk smoke:packed            # install both into a temp project, import every subpath (ESM, CJS, types)
+npm install /path/to/amund-sdk-X.Y.Z.tgz         # in a project outside the monorepo
 ```
 
-It applies the release workflow's name rewrite (`@morsehq-dev/sdk`) on a staging
-copy, writes the tarball outside the source tree, and never modifies
-`package.json`.
+Tarballs are written outside the source tree; `package.json` is never modified.
 
 ## Naming
 
-The npm package is `@morsehq-dev/sdk` (the npm org that exists is
-`morsehq-dev` — npm ties a package scope 1:1 to its owning org login).
-`@morsehq/sdk` is only the internal pnpm workspace identifier used
-inside this monorepo; it is never the published registry name.
+The npm package is `@amund/sdk` (npm org `amund`), and that is also the pnpm
+workspace name in this repo. `@morsehq-dev/sdk` is the pre-rebrand npm name
+(0.4.0 – 0.8.0); from the next release on it is published from `compat/morsehq-dev-sdk/` as a
+re-export shim at the same version. `@morsehq/sdk` was the old in-repo workspace
+name and was never published.

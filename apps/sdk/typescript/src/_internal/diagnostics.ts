@@ -111,13 +111,13 @@ export const REASON_SEND_FAILED = "send_failed";
  */
 const REASON_HINTS: Record<string, string> = {
   [REASON_AUTH_REJECTED]:
-    "Morse rejected your API key (wrong, revoked or expired); check MORSE_API_KEY",
+    "Amund rejected your API key (wrong, revoked or expired); check AMUND_API_KEY (or MORSE_API_KEY)",
   [REASON_QUOTA_REJECTED]:
-    "Morse is rate limiting or over quota for this key; telemetry is being lost",
-  [REASON_ENDPOINT_REJECTED]: "Morse rejected the request; check the endpoint URL and SDK version",
+    "Amund is rate limiting or over quota for this key; telemetry is being lost",
+  [REASON_ENDPOINT_REJECTED]: "Amund rejected the request; check the endpoint URL and SDK version",
   [REASON_RETRY_EXHAUSTED]:
-    "could not reach the Morse API after retrying; check your network and endpoint",
-  [REASON_SEND_FAILED]: "could not reach the Morse API; telemetry is being lost",
+    "could not reach the Amund API after retrying; check your network and endpoint",
+  [REASON_SEND_FAILED]: "could not reach the Amund API; telemetry is being lost",
 };
 
 /**
@@ -181,11 +181,11 @@ export function dropWarning(
   const count = `${quantity} ${category}(s)`;
   if (reason === REASON_AUTH_REJECTED) {
     const status = detail?.status ?? "401/403";
-    return `morse: Morse rejected the API key (${status}): ${count} dropped. Check MORSE_API_KEY or get a new key in Settings → API keys.`;
+    return `morse: Amund rejected the API key (${status}): ${count} dropped. Check AMUND_API_KEY (or MORSE_API_KEY) or get a new key in Settings → API keys.`;
   }
   if (detail?.unreachable && (reason === REASON_RETRY_EXHAUSTED || reason === REASON_SEND_FAILED)) {
-    const host = detail.host ?? "the Morse API";
-    return `morse: Morse unreachable (${host}): ${count} dropped after retries. ${plural(category)} are not buffered across outages.`;
+    const host = detail.host ?? "the Amund API";
+    return `morse: Amund unreachable (${host}): ${count} dropped after retries. ${plural(category)} are not buffered across outages.`;
   }
   return `morse: dropped ${quantity} ${category} (${reason}) — ${REASON_HINTS[reason] ?? "telemetry is being lost"}`;
 }
@@ -199,11 +199,11 @@ export function noteRetrying(host: string | undefined, notResponding = false): v
   try {
     if (retryingNoticeShown) return;
     retryingNoticeShown = true;
-    const where = host ?? "the Morse API";
+    const where = host ?? "the Amund API";
     console.warn(
       notResponding
-        ? `morse: Morse not responding (${where}), retrying…`
-        : `morse: Morse unreachable (${where}), retrying…`,
+        ? `morse: Amund not responding (${where}), retrying…`
+        : `morse: Amund unreachable (${where}), retrying…`,
     );
   } catch {
     // Never break a send.
@@ -316,12 +316,13 @@ export function checkRateLimit(fingerprint: string): boolean {
  * elided. Over-eliding costs us a debugging detail; under-eliding would ship
  * the customer's file layout.
  *
- * **Both package names must be listed.** The in-repo `package.json` name is
- * `@morsehq/sdk` (the pnpm workspace identifier), but `release-typescript.yml`
- * rewrites it to `@morsehq-dev/sdk` — the real npm scope — immediately before
- * publish. So EVERY customer install lives at `@morsehq-dev/sdk/...` and the
- * in-repo name never appears in a production stack trace.
- *
+ * **Every package name the SDK code has ever shipped under must be listed.**
+ * Since the Amund rebrand the package is published as `@amund/sdk` (also the in-repo
+ * workspace name), so customer installs live at `@amund/sdk/...`. Older
+ * installs live at `@morsehq-dev/sdk/...` (the pre-rebrand npm name, which
+ * is now shipped only as a re-export shim) and older checkouts used the
+ * workspace name `@morsehq/sdk`. `amund-sdk` / `morse-sdk` cover repo checkouts.
+
  * Listing only the in-repo name is what shipped through 0.5.0-rc.4: no frame
  * in any published build was recognised as ours, so every stack collapsed to
  * `[{elided: n}]` and diagnostics could not say where the SDK broke. Verified
@@ -331,7 +332,15 @@ export function checkRateLimit(fingerprint: string): boolean {
  * keep the fail-closed property: a customer directory that merely contains our
  * name must not cause their frames to be transmitted in full.
  */
-const MORSE_PATH_MARKERS = ["@morsehq/sdk", "@morsehq-dev/sdk", "morse-sdk", "/morse/", "morse_ai"];
+const MORSE_PATH_MARKERS = [
+  "@amund/sdk",
+  "@morsehq/sdk",
+  "@morsehq-dev/sdk",
+  "amund-sdk",
+  "morse-sdk",
+  "/morse/",
+  "morse_ai",
+];
 
 function isMorseFrame(line: string): boolean {
   return MORSE_PATH_MARKERS.some((marker) => line.includes(marker));
@@ -466,7 +475,7 @@ export function recordDrop(
   }
 }
 
-/* MHQ-1787 (offshore QA round 1, finding 06): with no MORSE_API_KEY and no
+/* MHQ-1787 (offshore QA round 1, finding 06): with no AMUND_API_KEY and no
  * `init()`, `morse.run()` still hands back a real-looking trace id (kept on
  * purpose, `traceId` semantics are unchanged) while nothing is ever sent. The
  * one-time "SDK calls are silent no-ops" warning at first use is easy to miss,
@@ -497,7 +506,7 @@ export function warnUnsentRunsAtExit(): void {
     unsentNoKeyRuns = 0;
     if (count > 0) {
       console.warn(
-        `morse: ${count} run(s) not sent: no API key (set MORSE_API_KEY or call init())`,
+        `morse: ${count} run(s) not sent: no API key (set AMUND_API_KEY or call init(); MORSE_API_KEY still works)`,
       );
     }
   } catch {
@@ -516,7 +525,7 @@ export interface ReportOptions {
   fingerprint: string;
   extra?: Record<string, unknown>;
   /**
-   * Print the raw local line only under `MORSE_SDK_DEBUG=1`. For failures a plain drop warning
+   * Print the raw local line only under `AMUND_SDK_DEBUG=1`. For failures a plain drop warning
    * already explained (rejected key, unreachable endpoint), so the host is not shown an
    * OpenTelemetry internal on top of it (MHQ-1838). Transmission is unaffected.
    */

@@ -1,5 +1,5 @@
 /**
- * Public API tests for `@morsehq/sdk`.
+ * Public API tests for `@amund/sdk`.
  *
  * Covers:
  *   - Module-level singleton API surface (init, track, batchTrack, record,
@@ -95,7 +95,7 @@ describe("init() + explicit api key", () => {
 
     expect(transport.events).toHaveLength(1);
     const calls = infoSpy.mock.calls.map((c) => String(c[0]));
-    const initLogs = calls.filter((m) => m.includes("Morse SDK initialized"));
+    const initLogs = calls.filter((m) => m.includes("Amund SDK initialized"));
     expect(initLogs).toHaveLength(1);
     expect(initLogs[0]).toContain("https://example.test/api");
     infoSpy.mockRestore();
@@ -108,7 +108,7 @@ describe("init() + explicit api key", () => {
     morse.init({ apiKey: "av_a", endpoint: "https://example.test/x" });
     const initLogs = infoSpy.mock.calls
       .map((c) => String(c[0]))
-      .filter((m) => m.includes("Morse SDK initialized"));
+      .filter((m) => m.includes("Amund SDK initialized"));
     expect(initLogs).toHaveLength(1);
     infoSpy.mockRestore();
   });
@@ -120,7 +120,7 @@ describe("init() + explicit api key", () => {
     morse.init({ apiKey: "av_a", endpoint: "https://example.test/y" });
     const initLogs = infoSpy.mock.calls
       .map((c) => String(c[0]))
-      .filter((m) => m.includes("Morse SDK initialized"));
+      .filter((m) => m.includes("Amund SDK initialized"));
     expect(initLogs).toHaveLength(2);
     infoSpy.mockRestore();
   });
@@ -138,7 +138,7 @@ describe("env-based auto-init", () => {
     expect(transport.events).toHaveLength(1);
     const initLogs = infoSpy.mock.calls
       .map((c) => String(c[0]))
-      .filter((m) => m.includes("Morse SDK initialized"));
+      .filter((m) => m.includes("Amund SDK initialized"));
     expect(initLogs).toHaveLength(1);
     expect(initLogs[0]).toContain("https://env.example/api");
     infoSpy.mockRestore();

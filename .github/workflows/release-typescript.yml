@@ -1,7 +1,7 @@
 # Standalone template: copy to .github/workflows/release-typescript.yml.
 # Rebind registry trusted publishers to this repository before enabling Actions.
 # Release tag pushes/dispatches require founder approval of the reviewed release.
-name: Release — TypeScript SDK (@morsehq-dev/sdk)
+name: Release — TypeScript SDK (@amund/sdk + @morsehq-dev/sdk shim)
 
 # MHQ-65 — tag-triggered release pipeline for the TypeScript SDK.
 # See engineering/SDK_PUBLISHING.md §5 for the full design writeup.
@@ -29,11 +29,27 @@ name: Release — TypeScript SDK (@morsehq-dev/sdk)
 # and npm CLI >= 11.5.1 / Node >= 22.14.0 on the publish job specifically
 # (the rest of the monorepo's CI stays on Node 20 — unaffected).
 #
-# The in-repo package.json name stays "@morsehq/sdk" (the pnpm workspace
-# identifier every other app imports from) — this workflow rewrites it to
-# "@morsehq-dev/sdk" (the real npm scope, see SDK_PUBLISHING.md's npm scope
-# note) on the runner's throwaway checkout only, immediately before
-# publish. That rewrite never reaches the repo.
+# Two packages are published per release, at the SAME version (Amund rebrand,
+# founder decision 2026-11-25):
+#
+#   - @amund/sdk        apps/sdk/typescript — the SDK. The in-repo package.json
+#                       name IS the published name; there is no rename step any
+#                       more (through 0.8.0 this workflow rewrote "@morsehq/sdk"
+#                       to "@morsehq-dev/sdk" on the runner).
+#   - @morsehq-dev/sdk  apps/sdk/typescript/compat/morsehq-dev-sdk — a thin
+#                       compatibility shim that re-exports every @amund/sdk
+#                       entry point and depends on exactly this @amund/sdk
+#                       version, so existing installs keep working.
+#
+# Both tarballs are produced by `pnpm pack` in the build job (which pins the
+# shim's "workspace:*" dependency to the exact version), installed and imported
+# from a scratch project by scripts/smoke-packed.mjs, and then those exact
+# files are published. @amund/sdk is published first: the shim's dependency
+# must exist on the registry before the shim does.
+#
+# Each package needs its own npm Trusted Publisher entry (repo + this workflow
+# file + environment). @morsehq-dev/sdk already has one; @amund/sdk needs one
+# created under the npm org `amund` before the first tag.
 
 on:
   push:
@@ -66,7 +82,6 @@ permissions:
 
 env:
   WORKING_DIR: apps/sdk/typescript
-  PUBLISHED_PACKAGE_NAME: "@morsehq-dev/sdk"
 
 jobs:
   determine-channel:
@@ -85,9 +100,14 @@ jobs:
         run: |
           TAG_VERSION="${GITHUB_REF_NAME#sdk-ts-v}"
           FILE_VERSION="$(node -p "require('./package.json').version")"
+          SHIM_VERSION="$(node -p "require('./compat/morsehq-dev-sdk/package.json').version")"
 
           if [ "$TAG_VERSION" != "$FILE_VERSION" ]; then
             echo "::error::Tag version ($TAG_VERSION) does not match package.json version ($FILE_VERSION) at this commit. Bump and commit the version before tagging."
+            exit 1
+          fi
+          if [ "$SHIM_VERSION" != "$FILE_VERSION" ]; then
+            echo "::error::@morsehq-dev/sdk shim version ($SHIM_VERSION) does not match @amund/sdk ($FILE_VERSION). Run 'node scripts/build.mjs --write' in compat/morsehq-dev-sdk and commit."
             exit 1
           fi
 
@@ -103,7 +123,7 @@ jobs:
           echo "version=$FILE_VERSION" >> "$GITHUB_OUTPUT"
           echo "channel=$CHANNEL" >> "$GITHUB_OUTPUT"
           echo "dist_tag=$DIST_TAG" >> "$GITHUB_OUTPUT"
-          echo "Releasing @morsehq-dev/sdk $FILE_VERSION on the $CHANNEL channel (dist-tag: $DIST_TAG)"
+          echo "Releasing @amund/sdk + @morsehq-dev/sdk $FILE_VERSION on the $CHANNEL channel (dist-tag: $DIST_TAG)"
 
   build-and-test:
     name: Build + test
@@ -125,16 +145,21 @@ jobs:
         run: pnpm install --frozen-lockfile
 
       - name: Type-check
-        run: pnpm --filter @morsehq/sdk type-check
+        run: pnpm --filter @amund/sdk type-check
 
       - name: Lint
-        run: pnpm --filter @morsehq/sdk lint
+        run: pnpm --filter @amund/sdk lint
 
       - name: Test
-        run: pnpm --filter @morsehq/sdk exec vitest run --maxWorkers=1
+        run: pnpm --filter @amund/sdk exec vitest run --maxWorkers=1
 
       - name: Build
-        run: pnpm --filter @morsehq/sdk build
+        run: pnpm --filter @amund/sdk build
+
+      - name: Build + test @morsehq-dev/sdk shim
+        run: |
+          pnpm --filter @morsehq-dev/sdk build
+          pnpm --filter @morsehq-dev/sdk test
 
       # Publishing a browser bundle that imports node built-ins breaks every
       # downstream consumer's bundler, and an npm version cannot be unpublished
@@ -142,27 +167,28 @@ jobs:
       - name: Check browser bundle has no Node-only imports
         run: node scripts/check-sdk-browser-bundle.mjs
 
-      - name: Rewrite package name for publish + dry-run pack
+      - name: Pack both packages
+        working-directory: ${{ env.WORKING_DIR }}
+        run: |
+          node scripts/pack-published.mjs --no-build --out "$GITHUB_WORKSPACE/packed"
+          ls -l "$GITHUB_WORKSPACE/packed"
+
+      # Install the exact tarballs into a scratch project and import every
+      # subpath of both packages (ESM + CJS + types) before anything is published.
+      - name: Smoke-test the packed tarballs
         working-directory: ${{ env.WORKING_DIR }}
         env:
-          PKG_NAME: ${{ env.PUBLISHED_PACKAGE_NAME }}
+          VERSION: ${{ needs.determine-channel.outputs.version }}
         run: |
-          node -e "
-            const fs = require('fs');
-            const pkg = JSON.parse(fs.readFileSync('package.json', 'utf8'));
-            pkg.name = process.env.PKG_NAME;
-            fs.writeFileSync('package.json', JSON.stringify(pkg, null, 2) + '\n');
-          "
-          npm pack --dry-run
+          node scripts/smoke-packed.mjs \
+            "$GITHUB_WORKSPACE/packed/amund-sdk-${VERSION}.tgz" \
+            "$GITHUB_WORKSPACE/packed/morsehq-dev-sdk-${VERSION}.tgz"
 
       - uses: actions/upload-artifact@v4
         with:
-          name: ts-package
-          path: |
-            ${{ env.WORKING_DIR }}/package.json
-            ${{ env.WORKING_DIR }}/dist/
-            ${{ env.WORKING_DIR }}/README.md
-            ${{ env.WORKING_DIR }}/LICENSE
+          name: ts-packages
+          path: packed/*.tgz
+          if-no-files-found: error
           retention-days: 7
 
   publish-npm:
@@ -175,10 +201,11 @@ jobs:
       id-token: write
     env:
       NPM_DIST_TAG: ${{ needs.determine-channel.outputs.dist_tag }}
+      VERSION: ${{ needs.determine-channel.outputs.version }}
     steps:
       - uses: actions/download-artifact@v4
         with:
-          name: ts-package
+          name: ts-packages
           path: publish-dir/
 
       - uses: actions/setup-node@v4
@@ -205,6 +232,21 @@ jobs:
 
       # npm OIDC requires a GitHub-hosted runner. Public source repositories
       # receive automatic provenance; private source repositories do not.
-      - name: Publish
+      #
+      # Order matters: the shim depends on exactly @amund/sdk@$VERSION. A
+      # package version that is already on the registry is skipped rather than
+      # failed, so a re-run after a partial publish (SDK out, shim not) finishes
+      # the job instead of dead-ending on "cannot publish over" errors.
+      - name: Publish @amund/sdk, then the @morsehq-dev/sdk shim
         working-directory: publish-dir
-        run: npm publish --tag "$NPM_DIST_TAG" --access public
+        run: |
+          publish() {
+            local name="$1" tarball="$2"
+            if npm view "${name}@${VERSION}" version >/dev/null 2>&1; then
+              echo "::notice::${name}@${VERSION} is already on npm; skipping."
+              return 0
+            fi
+            npm publish "./${tarball}" --tag "$NPM_DIST_TAG" --access public
+          }
+          publish "@amund/sdk" "amund-sdk-${VERSION}.tgz"
+          publish "@morsehq-dev/sdk" "morsehq-dev-sdk-${VERSION}.tgz"

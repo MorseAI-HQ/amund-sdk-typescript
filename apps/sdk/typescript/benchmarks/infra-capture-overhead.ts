@@ -1,7 +1,7 @@
 /**
  * INFRACAP-10 — overhead of default-on infra capture (TypeScript SDK).
  *
- *     pnpm --filter @morsehq/sdk bench:infra     # tsx benchmarks/infra-capture-overhead.ts
+ *     pnpm --filter @amund/sdk bench:infra     # tsx benchmarks/infra-capture-overhead.ts
  *
  * Same two questions and the same fixed thresholds as the Python benchmark:
  *
@@ -66,9 +66,9 @@ const median = (v: number[]): number => pct(v, 0.5);
 /* ------------------------------------------------------------------------ */
 
 function runChild(mode: "on" | "off", outFile: string): void {
-  process.env.MORSE_CAPTURE_DB = mode === "on" ? "1" : "0";
-  process.env.MORSE_CAPTURE_HTTP = "0";
-  process.env.MORSE_CAPTURE_QUEUE = "0";
+  process.env.AMUND_CAPTURE_DB = mode === "on" ? "1" : "0";
+  process.env.AMUND_CAPTURE_HTTP = "0";
+  process.env.AMUND_CAPTURE_QUEUE = "0";
   const engine = getEngine();
   engine.configure({
     endpoint: "http://127.0.0.1:1/api/v1/otlp/v1/traces",
@@ -215,8 +215,8 @@ async function main(): Promise<number> {
   for (let r = 0; r < NO_TRACE_ROUNDS; r++) {
     for (const on of [false, true]) {
       disableHttpCapture();
-      if (on) process.env.MORSE_CAPTURE_HTTP = "1";
-      else process.env.MORSE_CAPTURE_HTTP = "0";
+      if (on) process.env.AMUND_CAPTURE_HTTP = "1";
+      else process.env.AMUND_CAPTURE_HTTP = "0";
       maybeEnableInfraCaptureFromEnv();
       httpCycle();
       (on ? httpNoTrace.on : httpNoTrace.off).push(mean(timeLoop(httpCycle, NO_TRACE_CALLS)));
@@ -225,7 +225,7 @@ async function main(): Promise<number> {
   for (let r = 0; r < TRACE_ROUNDS; r++) {
     for (const on of [false, true]) {
       disableHttpCapture();
-      process.env.MORSE_CAPTURE_HTTP = on ? "1" : "0";
+      process.env.AMUND_CAPTURE_HTTP = on ? "1" : "0";
       maybeEnableInfraCaptureFromEnv();
       runSync({ agentName: "bench" }, () => {
         (on ? httpInTrace.on : httpInTrace.off).push(...timeLoop(httpCycle, BLOCK));
@@ -242,7 +242,7 @@ async function main(): Promise<number> {
   for (let r = 0; r < 60; r++) {
     for (const on of r % 2 === 0 ? [false, true] : [true, false]) {
       disableHttpCapture();
-      process.env.MORSE_CAPTURE_HTTP = on ? "1" : "0";
+      process.env.AMUND_CAPTURE_HTTP = on ? "1" : "0";
       maybeEnableInfraCaptureFromEnv();
       await (await fetch(base)).text();
       const t0 = now();
@@ -268,7 +268,7 @@ async function main(): Promise<number> {
     onNo: [] as number[],
   };
   const q = new Q();
-  process.env.MORSE_CAPTURE_QUEUE = "1";
+  process.env.AMUND_CAPTURE_QUEUE = "1";
   for (let r = 0; r < NO_TRACE_ROUNDS; r++) {
     for (const on of [false, true]) {
       const undo = on ? patchBullMqQueue(Q) : () => {};
