@@ -327,7 +327,7 @@ describe("OTLP wire", () => {
   });
   afterEach(() => getEngine().resetForTesting());
 
-  it("AID-04/AID-01: root span carries morse.app and morse.identity_source", async () => {
+  it("AID-04/AID-01: root span carries amund.app and amund.identity_source", async () => {
     // @spec: AID-04, AID-01
     await runAsync({ agentName: "airline-support" }, async () => {
       const h = new LangGraphHandler();
@@ -345,9 +345,9 @@ describe("OTLP wire", () => {
     });
     await getEngine().flush();
     const recorded = getEngine().recorder!.spans;
-    const root = recorded.find((s) => s.attributes["morse.agent"] !== undefined)!;
-    expect(root.attributes["morse.agent"]).toBe("Triage Agent");
-    expect(root.attributes["morse.app"]).toBe("airline-support");
-    expect(root.attributes["morse.identity_source"]).toBe("framework");
+    const root = recorded.find((s) => s.attributes["amund.agent"] !== undefined)!;
+    expect(root.attributes["amund.agent"]).toBe("Triage Agent");
+    expect(root.attributes["amund.app"]).toBe("airline-support");
+    expect(root.attributes["amund.identity_source"]).toBe("framework");
   });
 });

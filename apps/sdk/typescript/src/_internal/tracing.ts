@@ -485,7 +485,7 @@ function buildTraceDict(
   // MHQ-859: `morse_ai.framework` rides the same resource envelope as
   // `morse_ai.source` — both are per-trace values a process-wide OTel
   // Resource cannot express, and `otel-provider.ts` already lifts both onto
-  // the root span as `morse.source` / `morse.framework`. Python has stamped the
+  // the root span as `amund.source` / `amund.framework`. Python has stamped the
   // framework since AGE-240; TS never did, so every TS trace landed with
   // `framework` NULL.
   const resource: Record<string, unknown> = {};

@@ -127,7 +127,7 @@ type ProviderResource = NonNullable<
 
 /**
  * Resource carrying telemetry-SDK identity and, when set in the process
- * environment, `morse.process.service_name` — never `service.name`.
+ * environment, `amund.process.service_name` — never `service.name`.
  *
  * Implements the (small, stable) OTel `Resource` interface directly rather
  * than importing `@opentelemetry/resources`, which is only a transitive
@@ -141,7 +141,7 @@ export function buildSdkResource(
     "telemetry.sdk.language": "nodejs",
     "telemetry.sdk.name": "opentelemetry",
   };
-  if (processServiceName) attributes["morse.process.service_name"] = processServiceName;
+  if (processServiceName) attributes["amund.process.service_name"] = processServiceName;
   // ATTR-06: `git.revision` and `service.version` are real OTel resource attributes,
   // so unlike `service.name` they are safe to carry (ingest does not read them as an
   // agent name).
@@ -613,7 +613,7 @@ export class OtelEngine {
     // bundled default stamps `unknown_service:<argv0>` (and a host's
     // OTEL_SERVICE_NAME can end up there too); Morse ingest treats a real
     // `service.name` as the agent name, so the SDK resource must not carry
-    // one. The process service name is kept as `morse.process.service_name`.
+    // one. The process service name is kept as `amund.process.service_name`.
     // Built structurally (not via `@opentelemetry/resources`) so this module
     // takes no new direct dependency — see `buildSdkResource`.
     const resource = buildSdkResource(readEnvServiceName(), {
@@ -811,7 +811,7 @@ function spanDictToOtelAttributes(
   const attrs: Record<string, AttrValue> = {};
 
   const spanType = spanDict.type;
-  if (typeof spanType === "string" && spanType) attrs["morse.span_type"] = spanType;
+  if (typeof spanType === "string" && spanType) attrs["amund.span_type"] = spanType;
 
   const model = spanDict.model;
   if (model !== undefined && model !== null) attrs["gen_ai.request.model"] = String(model);
@@ -833,16 +833,16 @@ function spanDictToOtelAttributes(
 
   const costUsd = spanDict.cost_usd;
   if (costUsd !== undefined && costUsd !== null) {
-    // morse.cost_usd: direct SDK/adapter-computed cost (pricing-table based) —
+    // amund.cost_usd: direct SDK/adapter-computed cost (pricing-table based) —
     // distinct from gen_ai.usage.cost (provider-billing-reported).
     // Stringify to preserve precision across the wire.
-    attrs["morse.cost_usd"] = String(costUsd);
+    attrs["amund.cost_usd"] = String(costUsd);
   }
 
   for (const [src, otelKey] of [
-    ["input_data", "morse.input_data"],
-    ["output_data", "morse.output_data"],
-    ["context_segments", "morse.context_segments"],
+    ["input_data", "amund.input_data"],
+    ["output_data", "amund.output_data"],
+    ["context_segments", "amund.context_segments"],
   ] as const) {
     const v = spanDict[src];
     if (v !== undefined && v !== null) {
@@ -852,13 +852,13 @@ function spanDictToOtelAttributes(
   }
 
   // Arbitrary custom metadata. Each top-level key is namespaced under
-  // `morse.metadata.<key>` so the server's OTLP translation layer can pop +
+  // `amund.metadata.<key>` so the server's OTLP translation layer can pop +
   // un-prefix + JSON-decode them back into a clean metadata dict.
   const metadata = spanDict.metadata;
   if (metadata && typeof metadata === "object") {
     for (const [key, value] of Object.entries(metadata as Record<string, unknown>)) {
       const encoded = jsonCapped(value, opts.maxFieldBytes);
-      if (encoded !== null) attrs[`morse.metadata.${key}`] = encoded;
+      if (encoded !== null) attrs[`amund.metadata.${key}`] = encoded;
     }
   }
 
@@ -868,47 +868,47 @@ function spanDictToOtelAttributes(
     // MHQ-1100: the resolved agent name rides the root span; ingest reads it
     // in preference to any resource-level service.name.
     const agent = traceDict.agent;
-    if (typeof agent === "string" && agent) attrs["morse.agent"] = agent;
+    if (typeof agent === "string" && agent) attrs["amund.agent"] = agent;
     // AID-01/AID-04: how the name was resolved, and the run() label. Server reads
-    // `morse.app` into trace metadata `morse_app`; `morse.identity_source` -> `identity_source`.
+    // `amund.app` into trace metadata `morse_app`; `amund.identity_source` -> `identity_source`.
     const traceMeta = traceDict.metadata as Record<string, unknown> | undefined;
     if (typeof traceMeta?.identity_source === "string") {
-      attrs["morse.identity_source"] = traceMeta.identity_source;
+      attrs["amund.identity_source"] = traceMeta.identity_source;
     }
     if (typeof traceMeta?.morse_app === "string" && traceMeta.morse_app) {
-      attrs["morse.app"] = traceMeta.morse_app;
+      attrs["amund.app"] = traceMeta.morse_app;
     }
     const threadId = traceDict.thread_id;
-    if (threadId !== undefined && threadId !== null) attrs["morse.thread_id"] = String(threadId);
+    if (threadId !== undefined && threadId !== null) attrs["amund.thread_id"] = String(threadId);
     const userId = traceDict.user_id;
-    if (userId !== undefined && userId !== null) attrs["morse.user_id"] = String(userId);
+    if (userId !== undefined && userId !== null) attrs["amund.user_id"] = String(userId);
     const userMetadata = traceDict.user_metadata;
     if (userMetadata && typeof userMetadata === "object") {
       const entries = Object.entries(userMetadata as Record<string, unknown>);
       if (entries.length > 0) {
-        attrs["morse.user_metadata"] = JSON.stringify(
+        attrs["amund.user_metadata"] = JSON.stringify(
           Object.fromEntries(entries.map(([k, v]) => [k, String(v)])),
         );
       }
     }
     const success = traceDict.success;
     if (success !== undefined && success !== null)
-      attrs["morse.outcome.success"] = Boolean(success);
+      attrs["amund.outcome.success"] = Boolean(success);
     const outcome = traceDict.outcome;
-    if (outcome !== undefined && outcome !== null) attrs["morse.outcome.label"] = String(outcome);
+    if (outcome !== undefined && outcome !== null) attrs["amund.outcome.label"] = String(outcome);
     const framework = resourceDict["morse_ai.framework"];
-    if (typeof framework === "string" && framework) attrs["morse.framework"] = framework;
+    if (typeof framework === "string" && framework) attrs["amund.framework"] = framework;
     const source = resourceDict["morse_ai.source"];
-    if (typeof source === "string" && source) attrs["morse.source"] = source;
-    // ATTR-01: one `morse.record_key.<type>` attribute per key. Types were
+    if (typeof source === "string" && source) attrs["amund.source"] = source;
+    // ATTR-01: one `amund.record_key.<type>` attribute per key. Types were
     // lower-cased and validated when set, so the attribute name is safe.
     for (const [type, value] of safeEntries(traceDict.record_keys)) {
-      if (typeof value === "string" && value) attrs[`morse.record_key.${type}`] = value;
+      if (typeof value === "string" && value) attrs[`amund.record_key.${type}`] = value;
     }
     // ATTR-04: the declared agent version rides the root span (server: first value wins).
     const agentVersion = traceDict.agent_version;
     if (typeof agentVersion === "string" && agentVersion) {
-      attrs["morse.agent_version"] = agentVersion;
+      attrs["amund.agent_version"] = agentVersion;
     }
     // H2-C5 (harness-telemetry v1): `amund.harness.*` on the root span. No `morse.harness.*`.
     const hh = traceDict.harness_hash;
@@ -930,17 +930,17 @@ function spanDictToOtelAttributes(
   }
   // ATTR-04: a prompt reference sits on the span `setPrompt()` ran in, or the root.
   if (opts.prompt) {
-    attrs["morse.prompt.name"] = opts.prompt.name;
-    if (opts.prompt.version !== undefined) attrs["morse.prompt.version"] = opts.prompt.version;
+    attrs["amund.prompt.name"] = opts.prompt.name;
+    if (opts.prompt.version !== undefined) attrs["amund.prompt.version"] = opts.prompt.version;
     // UP-09: only "fetch" is sent; absent means declared.
-    if (opts.prompt.link_source === "fetch") attrs["morse.prompt.link_source"] = "fetch";
+    if (opts.prompt.link_source === "fetch") attrs["amund.prompt.link_source"] = "fetch";
   }
 
   if (errorMessage && spanDict.status === "failed") {
-    attrs["morse.error_message"] = String(errorMessage);
+    attrs["amund.error_message"] = String(errorMessage);
   }
   if (spanDict.exception_type && spanDict.status === "failed") {
-    attrs["morse.exception_type"] = String(spanDict.exception_type);
+    attrs["amund.exception_type"] = String(spanDict.exception_type);
   }
 
   return attrs;

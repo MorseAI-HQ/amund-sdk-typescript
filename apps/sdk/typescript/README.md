@@ -139,6 +139,39 @@ ENV AMUND_GIT_REVISION=$GIT_SHA
 `OTEL_RESOURCE_ATTRIBUTES=service.version=2.4.1`); there is no `init()` option for it.
 Both are detected once at `init()` and cached.
 
+## OTLP attribute names (Unreleased, track-only)
+
+Spans and the resource are exported with `amund.*` attributes. The SDK emits these only (no
+`morse.*` copies); the server reads `amund.*` first and falls back to `morse.*` for older SDKs.
+`amund.harness.*` (below) is the same namespace.
+
+| Old key (`morse.*`)          | New key (`amund.*`)          | Where         |
+| ---------------------------- | ---------------------------- | ------------- |
+| `morse.agent`                | `amund.agent`                | root span     |
+| `morse.agent_version`        | `amund.agent_version`        | root span     |
+| `morse.app`                  | `amund.app`                  | root span     |
+| `morse.identity_source`      | `amund.identity_source`      | root span     |
+| `morse.thread_id`            | `amund.thread_id`            | root span     |
+| `morse.user_id`              | `amund.user_id`              | root span     |
+| `morse.user_metadata`        | `amund.user_metadata`        | root span     |
+| `morse.outcome.success`      | `amund.outcome.success`      | root span     |
+| `morse.outcome.label`        | `amund.outcome.label`        | root span     |
+| `morse.framework`            | `amund.framework`            | root span     |
+| `morse.source`               | `amund.source`               | root span     |
+| `morse.record_key.<type>`    | `amund.record_key.<type>`    | root span     |
+| `morse.span_type`            | `amund.span_type`            | every span    |
+| `morse.cost_usd`             | `amund.cost_usd`             | span          |
+| `morse.input_data`           | `amund.input_data`           | span          |
+| `morse.output_data`          | `amund.output_data`          | span          |
+| `morse.context_segments`     | `amund.context_segments`     | span          |
+| `morse.metadata.<key>`       | `amund.metadata.<key>`       | span          |
+| `morse.prompt.name`          | `amund.prompt.name`          | span          |
+| `morse.prompt.version`       | `amund.prompt.version`       | span          |
+| `morse.prompt.link_source`   | `amund.prompt.link_source`   | span          |
+| `morse.error_message`        | `amund.error_message`        | span          |
+| `morse.exception_type`       | `amund.exception_type`       | span          |
+| `morse.process.service_name` | `amund.process.service_name` | OTLP resource |
+
 ## Harness identity (Unreleased, track-only)
 
 Optional fields that say which harness (prompts, skills, guardrails, memory, tool guidance, scripts,

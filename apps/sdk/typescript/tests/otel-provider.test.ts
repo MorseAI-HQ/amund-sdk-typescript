@@ -137,7 +137,7 @@ describe("byte cap", () => {
     return engine.flush().then(() => {
       const matching = spansFor(engine, traceId);
       expect(matching.length).toBeGreaterThan(0);
-      const raw = matching[0]!.attributes["morse.input_data"];
+      const raw = matching[0]!.attributes["amund.input_data"];
       expect(typeof raw).toBe("string");
       const markerLen = Buffer.byteLength(TRUNCATION_MARKER, "utf-8");
       expect(Buffer.byteLength(raw as string, "utf-8")).toBeLessThanOrEqual(65536 + markerLen + 2);
@@ -323,7 +323,7 @@ describe("export-time redaction", () => {
 
     const matching = spansFor(engine, traceId);
     expect(matching.length).toBe(1);
-    const raw = matching[0]!.attributes["morse.input_data"] as string;
+    const raw = matching[0]!.attributes["amund.input_data"] as string;
     expect(raw).toBeDefined();
     expect(raw).not.toContain("jane@example.com");
     expect(raw).toContain("[REDACTED:email]");
@@ -337,7 +337,7 @@ describe("export-time redaction", () => {
 
     const matching = spansFor(engine, traceId);
     expect(matching.length).toBe(1);
-    expect(matching[0]!.attributes["morse.input_data"] as string).toContain("jane@example.com");
+    expect(matching[0]!.attributes["amund.input_data"] as string).toContain("jane@example.com");
   });
 });
 

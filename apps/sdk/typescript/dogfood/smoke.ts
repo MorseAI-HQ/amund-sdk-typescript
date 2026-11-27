@@ -26,7 +26,7 @@
  *   - OTLP path (`run`/`runTraced`/`spanAsync`/`record`, since MHQ-482):
  *     every `ExportResult` must be SUCCESS. This catches a payload the
  *     endpoint refuses. It does NOT catch a value the endpoint accepts and
- *     then silently reinterprets — an unrecognised `morse.span_type` falls
+ *     then silently reinterprets — an unrecognised `amund.span_type` falls
  *     through `_map_span_type` and is stored as `custom` (MHQ-1014).
  *   - Span types (scenario 2e): asserted deliberately on the legacy JSON
  *     path, the only one where the server validates `type` against its
@@ -525,8 +525,8 @@ async function main(): Promise<void> {
 
   // 2g. Attribution fields (MHQ-1275, ATTR-01/04): record keys, agent version and
   //     prompt references. Rides OTLP, so the engine's `ExportResult`s below prove
-  //     the endpoint accepts the new `morse.record_key.*` / `morse.agent_version` /
-  //     `morse.prompt.*` attributes. What THIS block adds is the half OTLP cannot
+  //     the endpoint accepts the new `amund.record_key.*` / `amund.agent_version` /
+  //     `amund.prompt.*` attributes. What THIS block adds is the half OTLP cannot
   //     show: the endpoint returns 200 whether or not the SDK sent the fields, so the
   //     built trace dict is read back and every field must be on it. Storage fidelity
   //     is asserted server-side (apps/api/tests/traces/test_attribution_*.py).

@@ -34,7 +34,7 @@
  *    `ai.prompt*` / `ai.response.*`.
  *  - Resource: the SDK resource carries NO `service.name` (MHQ-1100), so
  *    Morse's ingest cannot take an agent name from it. When `functionId` is
- *    given, the tracer stamps `morse.agent` on a span that has no parent.
+ *    given, the tracer stamps `amund.agent` on a span that has no parent.
  *    Inside `morse.run("name", ...)` the Morse root already owns the agent
  *    name and the AI SDK spans nest under it (same trace id).
  *  - Context: needs a context manager so the AI SDK's `executeTool` /
@@ -76,7 +76,7 @@ export interface MorseTracerOptions {
   /** End-user id; stamped as `ai.telemetry.metadata.user_id`. */
   userId?: string;
   /**
-   * Names the agent for spans with no parent (`morse.agent`). Usually the
+   * Names the agent for spans with no parent (`amund.agent`). Usually the
    * same string as `functionId`.
    */
   agentName?: string;
@@ -189,7 +189,7 @@ class MorseScopedTracer implements Tracer {
     }
     const parentCtx = ctx ?? otelContext.active();
     const attributes: Attributes = { ...this.extra };
-    if (this.agentName && !hasValidParent(parentCtx)) attributes["morse.agent"] = this.agentName;
+    if (this.agentName && !hasValidParent(parentCtx)) attributes["amund.agent"] = this.agentName;
     Object.assign(attributes, options?.attributes);
     return base.startSpan(name, { ...options, attributes }, ctx);
   }
