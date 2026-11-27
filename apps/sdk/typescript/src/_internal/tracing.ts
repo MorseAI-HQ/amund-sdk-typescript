@@ -66,6 +66,12 @@ import { otelSpanIdFor } from "./span-ids";
 import { report, setRedactionConfig as setDiagnosticsRedactionConfig } from "./diagnostics";
 import { buildRedactionConfig, type RedactionConfig, redactValue } from "./redaction";
 import { getGitRevision, getServiceVersion } from "./revision";
+import {
+  _resetHarnessForTesting,
+  resolveTraceHarness,
+  type HarnessOptions,
+  type HarnessWireFields,
+} from "./harness";
 import type { SpanData, SpanStatus, SpanType } from "./spans";
 import { generateSpanId, generateTraceId, nowIso } from "./spans";
 import { extractTraceparent } from "../propagation";
@@ -116,6 +122,9 @@ export interface TraceState {
   // and the OTLP mapper copy them out verbatim.
   recordKeys?: Record<string, string>;
   agentVersion?: string;
+  // H2-C5 (harness-telemetry v1): validated + merged (client default, then run()
+  // options) wire fields. Undefined when nothing was declared (zero overhead).
+  harness?: HarnessWireFields;
   prompts?: PromptRef[];
   // AID-04: the name passed to `run()` when it differs from the discovered root.
   appName?: string;
@@ -441,6 +450,8 @@ function buildTraceDict(
     trace.record_keys = { ...state.recordKeys };
   }
   if (state.agentVersion) trace.agent_version = state.agentVersion;
+  // H2-C5: harness_* keys only when declared; absent traces keep their exact payload.
+  if (state.harness) Object.assign(trace, state.harness);
   if (state.prompts && state.prompts.length > 0) {
     trace.prompts = state.prompts.map((p) => ({ ...p }));
   }
@@ -564,7 +575,7 @@ function withDbCaptureContext<T>(traceId: string, spanIdHex: string, fn: () => T
 /*  Public-ish run() and span() — wrapped at the module surface              */
 /* ------------------------------------------------------------------------ */
 
-export interface RunOptions {
+export interface RunOptions extends HarnessOptions {
   /**
    * Explicit agent name from customer code. Optional (MHQ-1100): when
    * omitted, the name resolves from the framework-native name, the env
@@ -698,6 +709,8 @@ function startTrace(opts: RunOptions): {
     }
     const agentVersion = normalizeAgentVersion(opts.agentVersion) ?? _agentVersionDefault;
     if (agentVersion !== undefined) state.agentVersion = agentVersion;
+    const harness = resolveTraceHarness(opts);
+    if (harness !== undefined) state.harness = harness;
   } catch (err) {
     report(err, { fingerprint: "morse.tracing.run.attribution" });
   }
@@ -1321,6 +1334,7 @@ export function _resetForTesting(): void {
   browserState = null;
   lastTrace = null;
   _agentVersionDefault = undefined;
+  _resetHarnessForTesting();
   _captureEndUser = false;
   redactionConfig = buildRedactionConfig();
   // We do not reset `als` because re-loading it is expensive and the

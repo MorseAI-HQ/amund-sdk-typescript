@@ -373,6 +373,32 @@ async function main(): Promise<void> {
     process.exit(1);
   }
 
+  // 1b. Harness identity (H2-C5, harness-telemetry v1). Goes over OTLP like 1 (the
+  //     export must succeed, validated via `otlpResults`), and the declared fields
+  //     must be on the built trace: falsifiable offline, goes red if buildTraceDict
+  //     or the OTLP mapper stops carrying them.
+  morse.run(
+    {
+      agentName: "smoke-harness",
+      harnessHash: "a".repeat(64),
+      harnessVersion: "smoke-r1",
+      harnessChannelsChanged: ["prompt", "skill"],
+      harnessRunRole: "probe",
+    },
+    () => "done",
+  );
+  const harnessTrace = (
+    morse._getLastTraceForTesting() as { trace?: Record<string, unknown> } | null
+  )?.trace;
+  if (
+    harnessTrace?.harness_hash !== "a".repeat(64) ||
+    harnessTrace?.harness_run_role !== "probe" ||
+    JSON.stringify(harnessTrace?.harness_channels_changed) !== '["prompt","skill"]'
+  ) {
+    console.error("[smoke] ❌ harness_* fields missing from the built trace payload", harnessTrace);
+    process.exit(1);
+  }
+
   // 2. `runTraced` with nested `spanAsync` covering all common span types.
   //    Also OTLP — validated via `otlpResults` below.
   //

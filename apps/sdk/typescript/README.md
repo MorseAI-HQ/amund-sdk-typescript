@@ -139,6 +139,27 @@ ENV AMUND_GIT_REVISION=$GIT_SHA
 `OTEL_RESOURCE_ATTRIBUTES=service.version=2.4.1`); there is no `init()` option for it.
 Both are detected once at `init()` and cached.
 
+## Harness identity (Unreleased, track-only)
+
+Optional fields that say which harness (prompts, skills, guardrails, memory, tool guidance, scripts,
+subagents, plugins) a run executed under. Everything is optional; omitted fields cost nothing.
+
+```ts
+import { init, run, computeHarnessHash } from "@amundai/sdk";
+
+init({ harnessHash: computeHarnessHash(["prompts", "skills"]), harnessVersion: "bot@2026.11.27" });
+run(
+  { agentName: "support", harnessChannelsChanged: ["prompt"], harnessParentHash: prevHash },
+  () => {},
+);
+```
+
+`harnessHash` and `harnessParentHash` are 64 lowercase hex characters. `harnessChannelsChanged`,
+`harnessChannelsIncomplete` and `harnessParentHash` are dropped when there is no valid `harnessHash`.
+`harnessRunRole: "probe"` marks optimizer test runs. Invalid values are dropped with a one-time warning,
+never thrown. `computeHarnessHash` hashes raw file bytes (paths relative to `root`, default the
+current directory) and returns `undefined` outside Node.
+
 ## Zero-config instrumentation
 
 Once `morse.init()` runs (or `AMUND_API_KEY` is set in the environment),

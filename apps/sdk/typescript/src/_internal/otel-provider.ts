@@ -795,7 +795,7 @@ export function isOtelAvailable(): boolean {
 /*  Attribute mapping — trace-entry dict -> OTel attributes                 */
 /* ------------------------------------------------------------------------ */
 
-type AttrValue = string | number | boolean;
+type AttrValue = string | number | boolean | string[];
 
 function spanDictToOtelAttributes(
   spanDict: Record<string, unknown>,
@@ -910,6 +910,23 @@ function spanDictToOtelAttributes(
     if (typeof agentVersion === "string" && agentVersion) {
       attrs["morse.agent_version"] = agentVersion;
     }
+    // H2-C5 (harness-telemetry v1): `amund.harness.*` on the root span. No `morse.harness.*`.
+    const hh = traceDict.harness_hash;
+    if (typeof hh === "string" && hh) {
+      attrs["amund.harness.hash"] = hh;
+      const parent = traceDict.harness_parent_hash;
+      if (typeof parent === "string" && parent) attrs["amund.harness.parent_hash"] = parent;
+      const changed = traceDict.harness_channels_changed;
+      if (Array.isArray(changed)) {
+        attrs["amund.harness.channels_changed"] = changed.filter((c) => typeof c === "string");
+      }
+      const inc = traceDict.harness_channels_incomplete;
+      if (typeof inc === "boolean") attrs["amund.harness.channels_incomplete"] = inc;
+    }
+    const hv = traceDict.harness_version;
+    if (typeof hv === "string" && hv) attrs["amund.harness.version"] = hv;
+    const hr = traceDict.harness_run_role;
+    if (typeof hr === "string" && hr) attrs["amund.harness.run_role"] = hr;
   }
   // ATTR-04: a prompt reference sits on the span `setPrompt()` ran in, or the root.
   if (opts.prompt) {
