@@ -87,6 +87,6 @@ describe("otel exporter", () => {
     const event = span.events.find((e) => e.name === "exception");
     expect(event?.attributes?.["exception.type"]).toBe("TimeoutError");
     expect(event?.attributes?.["exception.message"]).toBe("Timeout after 30ms");
-    expect(span.attributes["morse.exception_type"]).toBe("TimeoutError");
+    expect(span.attributes["amund.exception_type"]).toBe("TimeoutError");
   });
 });

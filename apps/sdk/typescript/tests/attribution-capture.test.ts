@@ -472,11 +472,11 @@ describe("OTLP wire shape", () => {
     const spans = await exported(engine, traceId);
     const root = spans.get("otlp-root")!;
     const child = spans.get("child")!;
-    expect(root.attributes["morse.record_key.order"]).toBe("A-1");
-    expect(root.attributes["morse.record_key.github_pr"]).toBe("1123");
-    expect(root.attributes["morse.agent_version"]).toBe("v3");
-    expect(child.attributes["morse.agent_version"]).toBeUndefined();
-    expect(Object.keys(child.attributes).some((k) => k.startsWith("morse.record_key."))).toBe(
+    expect(root.attributes["amund.record_key.order"]).toBe("A-1");
+    expect(root.attributes["amund.record_key.github_pr"]).toBe("1123");
+    expect(root.attributes["amund.agent_version"]).toBe("v3");
+    expect(child.attributes["amund.agent_version"]).toBeUndefined();
+    expect(Object.keys(child.attributes).some((k) => k.startsWith("amund.record_key."))).toBe(
       false,
     );
   });
@@ -494,12 +494,12 @@ describe("OTLP wire shape", () => {
       });
     });
     const spans = await exported(engine, lastTrace().trace.trace_id);
-    expect(spans.get("otlp-prompts")!.attributes["morse.prompt.name"]).toBe("router");
-    expect(spans.get("otlp-prompts")!.attributes["morse.prompt.version"]).toBe(2);
-    expect(spans.get("classify")!.attributes["morse.prompt.name"]).toBe("classifier");
-    expect(spans.get("classify")!.attributes["morse.prompt.version"]).toBe(5);
-    expect(spans.get("summarize")!.attributes["morse.prompt.name"]).toBe("summarizer");
-    expect(spans.get("summarize")!.attributes["morse.prompt.version"]).toBeUndefined();
+    expect(spans.get("otlp-prompts")!.attributes["amund.prompt.name"]).toBe("router");
+    expect(spans.get("otlp-prompts")!.attributes["amund.prompt.version"]).toBe(2);
+    expect(spans.get("classify")!.attributes["amund.prompt.name"]).toBe("classifier");
+    expect(spans.get("classify")!.attributes["amund.prompt.version"]).toBe(5);
+    expect(spans.get("summarize")!.attributes["amund.prompt.name"]).toBe("summarizer");
+    expect(spans.get("summarize")!.attributes["amund.prompt.version"]).toBeUndefined();
   });
 
   // @spec: ATTR-04
@@ -515,8 +515,8 @@ describe("OTLP wire shape", () => {
     const trace = lastTrace().trace;
     expect(trace.prompts).toHaveLength(2); // JSON path loses nothing
     const spans = await exported(engine, trace.trace_id);
-    expect(spans.get("multi")!.attributes["morse.prompt.name"]).toBe("second");
-    expect(spans.get("multi")!.attributes["morse.prompt.version"]).toBe(2);
+    expect(spans.get("multi")!.attributes["amund.prompt.name"]).toBe("second");
+    expect(spans.get("multi")!.attributes["amund.prompt.version"]).toBe(2);
     expect(warn.mock.calls.some((c) => String(c[0]).includes("one per span"))).toBe(true);
   });
 
@@ -529,7 +529,7 @@ describe("OTLP wire shape", () => {
       morse.setPrompt("orphaned", 4);
     });
     const spans = await exported(engine, lastTrace().trace.trace_id);
-    expect(spans.get("otlp-orphan")!.attributes["morse.prompt.name"]).toBe("orphaned");
+    expect(spans.get("otlp-orphan")!.attributes["amund.prompt.name"]).toBe("orphaned");
   });
 
   // @spec: ATTR-06

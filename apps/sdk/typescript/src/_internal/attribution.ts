@@ -219,7 +219,7 @@ export function warnPromptSpanShared(): void {
   );
 }
 
-/** One prompt reference as OTLP carries it (`morse.prompt.*` span attributes). */
+/** One prompt reference as OTLP carries it (`amund.prompt.*` span attributes). */
 export interface OtlpPromptRef {
   name: string;
   version?: number;

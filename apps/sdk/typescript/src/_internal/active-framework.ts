@@ -6,7 +6,7 @@
  * resource, and the server uses it to disambiguate agents that share a
  * logical name but not an implementation. TypeScript had the *consumer*
  * side wired all along — `otel-provider.ts` already maps
- * `resource["morse_ai.framework"]` to the `morse.framework` root-span
+ * `resource["morse_ai.framework"]` to the `amund.framework` root-span
  * attribute — but nothing ever set it, so every TS trace landed with
  * `framework` NULL and framework filtering silently excluded all TS traffic.
  *

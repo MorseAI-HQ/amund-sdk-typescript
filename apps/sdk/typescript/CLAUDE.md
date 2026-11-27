@@ -60,9 +60,11 @@ and `uninstallClaudeAgentSDK` (which only undid a patch that could never apply).
 - Env vars are read through `_internal/env.ts::readSdkEnv("NAME")` (`AMUND_NAME`, then
   `MORSE_NAME`). Never read `process.env.MORSE_*` / `AMUND_*` directly;
   `tests/env-amund-fallback.test.ts` fails if you do.
-- Wire strings keep their `morse` names (`morse.*` / `morse_ai.*` attributes, `X-Morse-*` headers,
-  `morse-typescript` tracer + User-Agent, `@morsehq/instrumentation-*` scopes). Renaming any of
-  them is an API change, not a rebrand edit.
+- OTLP span/resource attributes are emitted as `amund.*` only (founder decision 2026-11-27; the
+  old `morse.*` keys are gone, see CHANGELOG). Other wire strings keep their `morse` names
+  (`morse_ai.*` internal resource keys, `X-Morse-*` headers, `morse-typescript` tracer +
+  User-Agent, `@morsehq/instrumentation-*` scopes). Renaming any of them is an API change, not a
+  rebrand edit.
 
 ## Sibling SDKs
 

@@ -12,6 +12,47 @@ because they are released in lockstep. Expect the numbers to diverge.
 
 ## [Unreleased]
 
+### Changed (track-only, not published): OTLP attributes move from `morse.*` to `amund.*` (MHQ-1951)
+
+Founder decision 2026-11-27. Every OTLP span and resource attribute the SDK emitted under `morse.*`
+is now emitted under `amund.*` with the same suffix. **Only `amund.*` is emitted: there is no double
+emission.** The server reads `amund.*` first and falls back to `morse.*`, so older SDKs keep working.
+`amund.harness.*` is unchanged. Values, types, redaction and the per-field byte cap
+(`AMUND_MAX_FIELD_BYTES`) are unchanged, so byte-capped batching is unaffected. Nothing in the JSON
+trace payload changes.
+
+| Old key (`morse.*`)          | New key (`amund.*`)          | Where         |
+| ---------------------------- | ---------------------------- | ------------- |
+| `morse.agent`                | `amund.agent`                | root span     |
+| `morse.agent_version`        | `amund.agent_version`        | root span     |
+| `morse.app`                  | `amund.app`                  | root span     |
+| `morse.identity_source`      | `amund.identity_source`      | root span     |
+| `morse.thread_id`            | `amund.thread_id`            | root span     |
+| `morse.user_id`              | `amund.user_id`              | root span     |
+| `morse.user_metadata`        | `amund.user_metadata`        | root span     |
+| `morse.outcome.success`      | `amund.outcome.success`      | root span     |
+| `morse.outcome.label`        | `amund.outcome.label`        | root span     |
+| `morse.framework`            | `amund.framework`            | root span     |
+| `morse.source`               | `amund.source`               | root span     |
+| `morse.record_key.<type>`    | `amund.record_key.<type>`    | root span     |
+| `morse.span_type`            | `amund.span_type`            | every span    |
+| `morse.cost_usd`             | `amund.cost_usd`             | span          |
+| `morse.input_data`           | `amund.input_data`           | span          |
+| `morse.output_data`          | `amund.output_data`          | span          |
+| `morse.context_segments`     | `amund.context_segments`     | span          |
+| `morse.metadata.<key>`       | `amund.metadata.<key>`       | span          |
+| `morse.prompt.name`          | `amund.prompt.name`          | span          |
+| `morse.prompt.version`       | `amund.prompt.version`       | span          |
+| `morse.prompt.link_source`   | `amund.prompt.link_source`   | span          |
+| `morse.error_message`        | `amund.error_message`        | span          |
+| `morse.exception_type`       | `amund.exception_type`       | span          |
+| `morse.process.service_name` | `amund.process.service_name` | OTLP resource |
+
+Not renamed: the JS API (`morse.init()`, `morse.run()`, ...), the `morse_ai.*` internal resource keys
+that carry source and framework before they are mapped onto `amund.source` / `amund.framework`,
+`X-Morse-*` headers and the `morse-typescript` tracer name. Anything that reads the old keys from the
+SDK's exported spans (custom collectors, dashboards) must switch to the new ones.
+
 ### Added (track-only, not published): harness identity fields (harness-telemetry v1, H2-C5, MHQ-1951)
 
 - Optional `harnessHash`, `harnessVersion`, `harnessChannelsChanged`, `harnessChannelsIncomplete`,

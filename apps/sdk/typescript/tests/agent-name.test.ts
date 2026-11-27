@@ -1,5 +1,5 @@
 /**
- * MHQ-1100 — agent name travels as the root-span attribute `morse.agent`;
+ * MHQ-1100 — agent name travels as the root-span attribute `amund.agent`;
  * an env-derived `service.name` must never reach the resource as identity.
  */
 
@@ -101,15 +101,15 @@ describe("root span + resource under OTEL_SERVICE_NAME", () => {
     return spans[spans.length - 1]!;
   }
 
-  it("explicit name wins; resource drops env service.name, keeps morse.process.service_name", async () => {
+  it("explicit name wins; resource drops env service.name, keeps amund.process.service_name", async () => {
     const root = await rootSpanFor({ agentName: "copilot" });
-    expect(root.attributes["morse.agent"]).toBe("copilot");
+    expect(root.attributes["amund.agent"]).toBe("copilot");
     expect(root.resource.attributes["service.name"]).toBeUndefined();
-    expect(root.resource.attributes["morse.process.service_name"]).toBe("proc");
+    expect(root.resource.attributes["amund.process.service_name"]).toBe("proc");
   });
 
   it("with no explicit name the env service name resolves the agent", async () => {
     const root = await rootSpanFor({});
-    expect(root.attributes["morse.agent"]).toBe("proc");
+    expect(root.attributes["amund.agent"]).toBe("proc");
   });
 });

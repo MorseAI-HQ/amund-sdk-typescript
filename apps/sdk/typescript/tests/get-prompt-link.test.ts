@@ -241,7 +241,7 @@ describe("OTLP wire (UP-09)", () => {
     return engine;
   }
 
-  it("sets morse.prompt.link_source=fetch for linked prompts only", async () => {
+  it("sets amund.prompt.link_source=fetch for linked prompts only", async () => {
     // @spec: UP-09
     morse.init({ apiKey: "mk_test_fake", endpoint: `${BASE}/api/v1/traces/batch` }); // pragma: allowlist secret
     const engine = configureRecorder(); // after init, so the recorder replaces the real exporter
@@ -261,14 +261,14 @@ describe("OTLP wire (UP-09)", () => {
     const byName = new Map<string, ReadableSpan>();
     for (const s of engine.recorder!.spans) byName.set(s.name, s);
     const root = byName.get("otlp-link")!;
-    expect(root.attributes["morse.prompt.name"]).toBe("triage");
-    expect(root.attributes["morse.prompt.version"]).toBe(3);
-    expect(root.attributes["morse.prompt.link_source"]).toBe("fetch");
+    expect(root.attributes["amund.prompt.name"]).toBe("triage");
+    expect(root.attributes["amund.prompt.version"]).toBe(3);
+    expect(root.attributes["amund.prompt.link_source"]).toBe("fetch");
     const declared = byName.get("declared-step")!;
-    expect(declared.attributes["morse.prompt.name"]).toBe("summarizer");
-    expect(declared.attributes["morse.prompt.link_source"]).toBeUndefined();
+    expect(declared.attributes["amund.prompt.name"]).toBe("summarizer");
+    expect(declared.attributes["amund.prompt.link_source"]).toBeUndefined();
     const route = byName.get("route")!;
-    expect(route.attributes["morse.prompt.name"]).toBe("router");
-    expect(route.attributes["morse.prompt.link_source"]).toBe("fetch");
+    expect(route.attributes["amund.prompt.name"]).toBe("router");
+    expect(route.attributes["amund.prompt.link_source"]).toBe("fetch");
   });
 });

@@ -159,8 +159,8 @@ describe("morseTelemetry() with an initialised engine", () => {
     const spans = await exportedSpans();
     const root = spans.find((s) => s.name === "ai.generateText")!;
     const child = spans.find((s) => s.name === "ai.generateText.doGenerate")!;
-    expect(root.attributes["morse.agent"]).toBe("billing-bot");
-    expect(child.attributes["morse.agent"]).toBeUndefined();
+    expect(root.attributes["amund.agent"]).toBe("billing-bot");
+    expect(child.attributes["amund.agent"]).toBeUndefined();
     expect(root.resource.attributes["service.name"]).toBeUndefined();
   });
 
@@ -229,7 +229,7 @@ describe("morseTelemetry() with an initialised engine", () => {
     expect(morseTraceId).toMatch(/^[0-9a-f]{32}$/);
     expect(root.spanContext().traceId).toBe(morseTraceId);
     // Inside a Morse run the Morse root owns the agent name.
-    expect(root.attributes["morse.agent"]).toBeUndefined();
+    expect(root.attributes["amund.agent"]).toBeUndefined();
   });
 
   it("works with the GenAI-convention OpenTelemetry integration too", async () => {
