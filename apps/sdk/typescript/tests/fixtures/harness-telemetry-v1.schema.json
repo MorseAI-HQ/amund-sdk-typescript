@@ -1,0 +1,122 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://amundai.com/schemas/harness2/harness-telemetry-v1.schema.json",
+  "title": "Amund harness telemetry v1 (FROZEN)",
+  "description": "Frozen contract (MHQ-1949, 2026-11-26) for the optional harness-identity fields an instrumented agent may send. One logical shape ($defs.harness_fields, an open fragment) and three carriers: SDK arguments (amund-sdk-python, amund-sdk-typescript) validated by this closed top-level object; OTLP attributes under amund.harness.* (morse-api OTLP ingest); and the MCP declare_change input (DLOOP-06, H1), which composes $defs.harness_fields into its own closed schema. Every field is optional; an absent field means 'unknown', never 'unchanged'. Strictly frozen: any change, including a new enum value, needs a v2 file. See ../branch-and-sync-contract.md section 5.",
+  "x-amund-status": "frozen",
+  "x-amund-version": "1.0.0",
+  "x-amund-frozen-on": "2026-11-26",
+  "x-amund-owner-issue": "MHQ-1949",
+  "x-amund-review": "6-role adversarial review 2026-11-26; pre-freeze fixes: open $defs fragment, per-item channel drop, run_role probe marker, channel-name map, no legacy alias",
+  "x-amund-consumers": ["MHQ-1951", "MHQ-1952", "MHQ-1953", "MHQ-1957"],
+  "type": "object",
+  "$ref": "#/$defs/harness_fields",
+  "unevaluatedProperties": false,
+  "$defs": {
+    "sha256": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+    "harness_fields": {
+      "description": "Open fragment: the harness fields only. Compose with $ref into any carrier schema (declare_change, ingest models). Not closed, so it never rejects a carrier's own fields.",
+      "type": "object",
+      "properties": {
+        "harness_hash": {
+          "description": "SHA-256 of the canonical harness the run executed under, as 64 lowercase hex characters, no prefix. Computed client-side; the server never derives it. Customers may use any stable hash of their own (a git tree SHA-256, a config hash); Amund's own trees use tree_hash from harness-tree-manifest-v1.",
+          "$ref": "#/$defs/sha256"
+        },
+        "harness_version": {
+          "description": "Optional human label (a semver, git short SHA or release name). Display only: never an identity or join key.",
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        },
+        "harness_channels_changed": {
+          "description": "Channels whose content differs from harness_parent_hash (or from the previous hash this agent reported). Empty array = sender asserts no channel changed; absent = unknown. Unique values, any order.",
+          "type": "array",
+          "uniqueItems": true,
+          "maxItems": 8,
+          "items": { "$ref": "#/$defs/harness_channel" }
+        },
+        "harness_channels_incomplete": {
+          "description": "True when the sender changed something outside the eight channels (a tool definition, the model or its config) or when an SDK dropped an unrecognised channel value. Tells consumers the list is a lower bound.",
+          "type": "boolean"
+        },
+        "harness_parent_hash": {
+          "description": "harness_hash this harness was derived from (one recursion step). Lets ingest build lineage without trusting arrival order; CPSO slices by lineage segment as well as by single hash.",
+          "$ref": "#/$defs/sha256"
+        },
+        "harness_run_role": {
+          "description": "production = a real run whose outcome counts; probe = a run made by a harness optimizer to test a candidate. Probe runs never enter a CPSO denominator or a verdict; their spend is folded into the lineage of the adopted descendant. Absent = production.",
+          "type": "string",
+          "enum": ["production", "probe"]
+        }
+      },
+      "dependentRequired": {
+        "harness_channels_changed": ["harness_hash"],
+        "harness_channels_incomplete": ["harness_hash"],
+        "harness_parent_hash": ["harness_hash"]
+      }
+    },
+    "harness_channel": {
+      "description": "Observation enum: the eight Harness2 component kinds. Wider than the six EDITABLE channels of harness-tree-manifest-v1 on purpose: Amund must SEE a customer change a guardrail or plugin (the guardrail-erosion lane, MHQ-1952) although Amund's own optimizer may never EDIT one. Anything else is signalled with harness_channels_incomplete.",
+      "type": "string",
+      "enum": [
+        "prompt",
+        "skill",
+        "guardrail",
+        "memory",
+        "tool_guidance",
+        "script",
+        "subagent",
+        "plugin"
+      ]
+    }
+  },
+  "x-amund-channel-map": {
+    "description": "Telemetry (singular, observation) to tree-manifest channel (plural directory, editable). null = locked, never editable by Amund.",
+    "prompt": "prompts",
+    "skill": "skills",
+    "script": "scripts",
+    "subagent": "subagents",
+    "memory": "memory",
+    "tool_guidance": "tool_guidance",
+    "guardrail": null,
+    "plugin": null
+  },
+  "x-amund-carriers": {
+    "sdk": {
+      "python": "keyword arguments harness_hash=, harness_version=, harness_channels_changed=, harness_channels_incomplete=, harness_parent_hash=, harness_run_role= on the trace/agent context",
+      "typescript": "options harnessHash, harnessVersion, harnessChannelsChanged, harnessChannelsIncomplete, harnessParentHash, harnessRunRole",
+      "rule": "validate locally; never raise into the host app. An invalid scalar is dropped. In harness_channels_changed, unrecognised items are dropped one by one, the valid items are kept, and harness_channels_incomplete is set true. One debug log line per drop."
+    },
+    "otlp": {
+      "amund.harness.hash": "string",
+      "amund.harness.version": "string",
+      "amund.harness.channels_changed": "string[] (OTLP ArrayValue)",
+      "amund.harness.channels_incomplete": "bool",
+      "amund.harness.parent_hash": "string",
+      "amund.harness.run_role": "string, production | probe",
+      "placement": "resource attributes OR the root agent span; a span-level value overrides the resource value for that trace. dependentRequired is checked on the merged view.",
+      "namespace_note": "amund.harness.* is the founder-specified namespace (2026-11-26). There is NO morse.harness.* alias: nothing ever emitted it, and the 2026-09-21 wire decision rejects dual-accept. Whether the other morse.* attributes move to amund.* is a separate founder decision.",
+      "invalid_values": "ingest drops the invalid attribute (per item for channels_changed), keeps the span, counts the drop; it never rejects the batch"
+    },
+    "mcp_declare_change": {
+      "fields": "compose $defs.harness_fields into the closed declare_change input schema",
+      "rule": "a declared harness_hash is a client claim; it proposes a link like git_revision/agent_version and never creates or alters a ChangeRecord"
+    }
+  },
+  "examples": [
+    {
+      "harness_hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "harness_version": "support-bot@2026.11.26-r3",
+      "harness_channels_changed": ["prompt", "skill"],
+      "harness_parent_hash": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      "harness_run_role": "production"
+    },
+    {
+      "harness_hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "harness_channels_changed": ["guardrail"],
+      "harness_channels_incomplete": true,
+      "harness_run_role": "probe"
+    },
+    {}
+  ]
+}

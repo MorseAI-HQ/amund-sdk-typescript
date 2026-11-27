@@ -12,6 +12,18 @@ because they are released in lockstep. Expect the numbers to diverge.
 
 ## [Unreleased]
 
+### Added (track-only, not published): harness identity fields (harness-telemetry v1, H2-C5, MHQ-1951)
+
+- Optional `harnessHash`, `harnessVersion`, `harnessChannelsChanged`, `harnessChannelsIncomplete`,
+  `harnessParentHash` and `harnessRunRole` on `init()` and `run()` (a run value overrides the init value,
+  field by field). They travel as `harness_*` on the JSON trace payload and `amund.harness.*` on the OTLP
+  root span. `HarnessChannel` is exported. Invalid values are dropped with one warning, never thrown;
+  unknown channel items are dropped one by one (valid ones kept, `harnessChannelsIncomplete` set).
+- `computeHarnessHash(paths, { root? })` (Node) implements `file_set_hash` from the frozen contract;
+  it returns `undefined` with a warning where `fs` is unavailable.
+- Nothing changes on the wire when these options are not used. Not released: this lives on the
+  `feat/harness2-afdo-cpso` track branch.
+
 ### Changed — published as `@amundai/sdk` (Morse is now Amund)
 
 - **The package is now `@amundai/sdk`** (npm org `amundai`, founder decision 2026-11-25; the `@amund` scope belongs to another npm user). The

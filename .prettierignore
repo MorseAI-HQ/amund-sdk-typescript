@@ -30,3 +30,5 @@ memory/decisions/
 # Letting json.dumps be canonical makes the writer's own "unchanged" check
 # effective, so a clean tree stays clean.
 engineering/dogfood-coverage.json
+
+tests/fixtures/harness-telemetry-v1.schema.json

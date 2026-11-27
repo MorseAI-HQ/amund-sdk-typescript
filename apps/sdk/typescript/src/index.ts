@@ -91,6 +91,14 @@ import {
   spanSync as _spanSync,
   _resetForTesting as _resetTracingForTesting,
 } from "./_internal/tracing";
+import { setHarnessDefault, type HarnessOptions } from "./_internal/harness";
+export { computeHarnessHash } from "./_internal/harness";
+export type {
+  ComputeHarnessHashOptions,
+  HarnessChannel,
+  HarnessOptions,
+  HarnessRunRole,
+} from "./_internal/harness";
 import {
   report,
   setDiagnosticsClientConfig,
@@ -168,7 +176,7 @@ export const version = SDK_VERSION;
 /* ------------------------------------------------------------------------ */
 
 /** Options accepted by `init()`. Mirrors Python's `init(...)` kwargs. */
-export interface InitOptions {
+export interface InitOptions extends HarnessOptions {
   /** API key (starts with "mhq_"). Required if no `AMUND_API_KEY` (or `MORSE_API_KEY`) env var. */
   apiKey?: string;
   /** Full ingestion URL. Defaults to the production Railway endpoint. */
@@ -350,6 +358,7 @@ function buildSingleton(opts: InitOptions, redaction: RedactionConfig): Singleto
   const resolvedSource = explicitSource ?? readInternalSourceFromEnv() ?? null;
   _setSource(resolvedSource);
   setAgentVersionDefault(opts.agentVersion);
+  setHarnessDefault(opts);
   setCaptureEndUser(opts.captureEndUser);
   // ATTR-06: git revision (env vars, then `git rev-parse HEAD` on Node) and
   // `service.version` (from OTEL_RESOURCE_ATTRIBUTES), detected once here and
